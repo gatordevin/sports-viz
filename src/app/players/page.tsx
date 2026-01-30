@@ -2,11 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { BDLPlayer, BDLTeam } from '@/lib/balldontlie'
+import Link from 'next/link'
+import { BDLPlayer, BDLSeasonAverage } from '@/lib/balldontlie'
 
-function PlayerSearchCard({ player }: { player: BDLPlayer }) {
+interface PlayerWithStats extends BDLPlayer {
+  seasonAvg?: BDLSeasonAverage
+}
+
+function PlayerSearchCard({ player, seasonAvg }: { player: BDLPlayer; seasonAvg?: BDLSeasonAverage }) {
   return (
-    <div className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300">
+    <Link
+      href={`/players/${player.id}`}
+      className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300 block group cursor-pointer"
+    >
       <div className="flex items-start space-x-4">
         <div className="w-14 h-14 sm:w-16 sm:h-16 relative flex-shrink-0 rounded-full overflow-hidden bg-gray-800 flex items-center justify-center">
           <span className="text-2xl font-bold text-gray-600">
@@ -15,7 +23,7 @@ function PlayerSearchCard({ player }: { player: BDLPlayer }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-            <h3 className="font-bold text-lg text-white">
+            <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors">
               {player.first_name} {player.last_name}
             </h3>
             {player.jersey_number && (
@@ -32,45 +40,82 @@ function PlayerSearchCard({ player }: { player: BDLPlayer }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-2">
-        <div className="bg-white/5 rounded-lg p-2 text-center">
-          <p className="text-xs text-gray-500">Height</p>
-          <p className="text-sm font-semibold text-white">{player.height || 'N/A'}</p>
+      {/* Season Stats - Show if available */}
+      {seasonAvg ? (
+        <div className="mt-4 grid grid-cols-5 gap-2">
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">PPG</p>
+            <p className="text-lg font-bold text-primary">{seasonAvg.pts.toFixed(1)}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">RPG</p>
+            <p className="text-sm font-semibold text-white">{seasonAvg.reb.toFixed(1)}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">APG</p>
+            <p className="text-sm font-semibold text-white">{seasonAvg.ast.toFixed(1)}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">FG%</p>
+            <p className="text-sm font-semibold text-white">{(seasonAvg.fg_pct * 100).toFixed(1)}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">GP</p>
+            <p className="text-sm font-semibold text-white">{seasonAvg.games_played}</p>
+          </div>
         </div>
-        <div className="bg-white/5 rounded-lg p-2 text-center">
-          <p className="text-xs text-gray-500">Weight</p>
-          <p className="text-sm font-semibold text-white">{player.weight ? `${player.weight} lbs` : 'N/A'}</p>
+      ) : (
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">Height</p>
+            <p className="text-sm font-semibold text-white">{player.height || 'N/A'}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">Weight</p>
+            <p className="text-sm font-semibold text-white">{player.weight ? `${player.weight} lbs` : 'N/A'}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">Draft</p>
+            <p className="text-sm font-semibold text-white">
+              {player.draft_year ? `${player.draft_year}` : 'N/A'}
+            </p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2 text-center">
+            <p className="text-xs text-gray-500">Country</p>
+            <p className="text-sm font-semibold text-white truncate">{player.country || 'N/A'}</p>
+          </div>
         </div>
-        <div className="bg-white/5 rounded-lg p-2 text-center">
-          <p className="text-xs text-gray-500">Draft</p>
-          <p className="text-sm font-semibold text-white">
-            {player.draft_year ? `${player.draft_year}` : 'N/A'}
-          </p>
-        </div>
-        <div className="bg-white/5 rounded-lg p-2 text-center">
-          <p className="text-xs text-gray-500">Country</p>
-          <p className="text-sm font-semibold text-white truncate">{player.country || 'N/A'}</p>
-        </div>
-      </div>
+      )}
 
       {player.college && (
         <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-white/10">
           College: {player.college}
         </p>
       )}
-    </div>
+
+      {/* View More Indicator */}
+      <div className="mt-3 flex items-center justify-center text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+        <span>View Full Stats</span>
+        <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </Link>
   )
 }
 
 export default function PlayersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [players, setPlayers] = useState<BDLPlayer[]>([])
+  const [seasonAverages, setSeasonAverages] = useState<Record<number, BDLSeasonAverage>>({})
   const [loading, setLoading] = useState(false)
+  const [loadingStats, setLoadingStats] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const searchPlayers = async (query: string) => {
     if (query.length < 2) {
       setPlayers([])
+      setSeasonAverages({})
       return
     }
 
@@ -88,11 +133,47 @@ export default function PlayersPage() {
 
       const data = await res.json()
       setPlayers(data.data)
+
+      // Fetch season averages for found players
+      if (data.data.length > 0) {
+        fetchSeasonAverages(data.data.map((p: BDLPlayer) => p.id))
+      }
     } catch (err) {
       setError('Failed to search players. Please try again.')
       setPlayers([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchSeasonAverages = async (playerIds: number[]) => {
+    if (playerIds.length === 0) return
+
+    setLoadingStats(true)
+
+    try {
+      // Build query string with multiple player_ids
+      const params = new URLSearchParams({ season: '2024' })
+      playerIds.forEach(id => params.append('player_ids[]', id.toString()))
+
+      const res = await fetch(`https://api.balldontlie.io/v1/season_averages?${params.toString()}`, {
+        headers: {
+          'Authorization': 'REDACTED_BDL_KEY_OLD'
+        }
+      })
+
+      if (!res.ok) return
+
+      const data = await res.json()
+      const avgMap: Record<number, BDLSeasonAverage> = {}
+      data.data.forEach((avg: BDLSeasonAverage) => {
+        avgMap[avg.player_id] = avg
+      })
+      setSeasonAverages(avgMap)
+    } catch (err) {
+      console.error('Failed to fetch season averages:', err)
+    } finally {
+      setLoadingStats(false)
     }
   }
 
@@ -140,7 +221,7 @@ export default function PlayersPage() {
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          {loading && (
+          {(loading || loadingStats) && (
             <div className="absolute right-4 top-1/2 -translate-y-1/2">
               <svg className="animate-spin w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -166,10 +247,15 @@ export default function PlayersPage() {
         <div>
           <p className="text-sm text-gray-400 mb-4">
             Found {players.length} player{players.length !== 1 ? 's' : ''} matching &quot;{searchQuery}&quot;
+            {loadingStats && <span className="text-primary ml-2">Loading stats...</span>}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {players.map((player) => (
-              <PlayerSearchCard key={player.id} player={player} />
+              <PlayerSearchCard
+                key={player.id}
+                player={player}
+                seasonAvg={seasonAverages[player.id]}
+              />
             ))}
           </div>
         </div>

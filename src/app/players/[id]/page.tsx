@@ -150,20 +150,18 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
           {/* Player Photo */}
           <div className="w-32 h-32 sm:w-40 sm:h-40 relative flex-shrink-0 rounded-full overflow-hidden bg-gray-800 ring-4 ring-primary/20">
+            {/* Initials as fallback background */}
+            <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-600">
+              {player.first_name[0]}{player.last_name[0]}
+            </div>
+            {/* Player headshot - will overlay initials if loads */}
             <Image
               src={getPlayerHeadshot(player)}
               alt={`${player.first_name} ${player.last_name}`}
               fill
               className="object-cover"
-              onError={(e) => {
-                // Fallback to initials if image fails
-                const target = e.target as HTMLImageElement
-                target.style.display = 'none'
-              }}
+              unoptimized
             />
-            <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-600">
-              {player.first_name[0]}{player.last_name[0]}
-            </div>
           </div>
 
           {/* Player Info */}

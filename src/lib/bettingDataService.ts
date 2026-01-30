@@ -1,13 +1,14 @@
 // Unified Betting Data Service
 // Provides a multi-source fallback chain for betting statistics
-// Sources: BallDontLie API (primary) -> The Odds API (secondary) -> null (never fake data)
+// Sources: Covers.com (primary) -> null (never fake data)
 
-import { ATSRecord, OURecord, RestInfo, calculateATSRecord, calculateOURecord, calculateRestInfo } from './bettingStats'
-import { calculateRealATSRecord, calculateRealOURecord, RealATSRecord, RealOURecord } from './realBettingStats'
+import { ATSRecord, OURecord, RestInfo, calculateRestInfo } from './bettingStats'
+import { RealATSRecord, RealOURecord } from './realBettingStats'
+import { fetchCoversATSData, coversToRealATSRecord, coversToRealOURecord } from './coversScraper'
 import { RecentGame } from './espn'
 
 // Data source tracking for transparency
-export type DataSource = 'balldontlie' | 'odds-api' | 'simulated' | 'unavailable'
+export type DataSource = 'covers' | 'balldontlie' | 'odds-api' | 'simulated' | 'unavailable'
 
 export interface BettingDataResult<T> {
   data: T | null
@@ -62,9 +63,10 @@ function cacheData(cacheKey: string, data: TeamBettingData) {
  * Get betting data for a team with multi-source fallback
  *
  * Priority:
- * 1. BallDontLie API (real historical spreads) - NBA only
- * 2. Simulated from game results (if recent games available)
- * 3. Return null with 'unavailable' source (NEVER fake data)
+ * 1. Covers.com (real ATS data scraped from their website) - NBA only
+ * 2. Return null with 'unavailable' source (NEVER fake data)
+ *
+ * We no longer use simulated data as it produces inaccurate results.
  */
 export async function getTeamBettingData(
   sport: 'nba' | 'nfl',
@@ -87,75 +89,45 @@ export async function getTeamBettingData(
     restInfo: { data: null, source: 'unavailable', isReal: false, timestamp: now }
   }
 
-  // === ATS RECORD ===
-  // Try BallDontLie first (NBA only - they have real betting data)
+  // === ATS RECORD & O/U RECORD ===
+  // Use Covers.com as the PRIMARY source (NBA only)
   if (sport === 'nba') {
     try {
-      const realATS = await calculateRealATSRecord(espnTeamId, 15)
-      if (realATS.isRealData && (realATS.wins + realATS.losses) > 0) {
-        result.atsRecord = {
-          data: realATS,
-          source: 'balldontlie',
-          isReal: true,
-          timestamp: now
+      const coversData = await fetchCoversATSData(espnTeamId)
+      if (coversData && coversData.isRealData) {
+        // Convert Covers data to our format
+        const realATS = coversToRealATSRecord(coversData)
+        const realOU = coversToRealOURecord(coversData)
+
+        if (realATS.wins + realATS.losses > 0) {
+          result.atsRecord = {
+            data: realATS,
+            source: 'covers',
+            isReal: true,
+            timestamp: now
+          }
+          logDataFetch('covers', espnTeamId, true)
         }
-        logDataFetch('balldontlie', espnTeamId, true)
+
+        if (realOU.overs + realOU.unders > 0) {
+          result.ouRecord = {
+            data: realOU,
+            source: 'covers',
+            isReal: true,
+            timestamp: now
+          }
+        }
       } else {
-        logDataFetch('balldontlie', espnTeamId, false, 'No data returned')
+        logDataFetch('covers', espnTeamId, false, 'No data returned or failed to scrape')
       }
     } catch (error) {
-      logDataFetch('balldontlie', espnTeamId, false, String(error))
+      logDataFetch('covers', espnTeamId, false, String(error))
     }
   }
 
-  // Fallback to simulated ATS if BallDontLie didn't work
-  if (!result.atsRecord.data && recentGames.length >= 3) {
-    const simulatedATS = calculateATSRecord(recentGames)
-    if (simulatedATS) {
-      result.atsRecord = {
-        data: simulatedATS,
-        source: 'simulated',
-        isReal: false,
-        timestamp: now
-      }
-      logDataFetch('simulated', espnTeamId, true)
-    }
-  }
-
-  // === O/U RECORD ===
-  // Try BallDontLie first (NBA only)
-  if (sport === 'nba') {
-    try {
-      const realOU = await calculateRealOURecord(espnTeamId, 15)
-      if (realOU.isRealData && (realOU.overs + realOU.unders) > 0) {
-        result.ouRecord = {
-          data: realOU,
-          source: 'balldontlie',
-          isReal: true,
-          timestamp: now
-        }
-        logDataFetch('balldontlie', espnTeamId, true)
-      } else {
-        logDataFetch('balldontlie', espnTeamId, false, 'No O/U data returned')
-      }
-    } catch (error) {
-      logDataFetch('balldontlie', espnTeamId, false, String(error))
-    }
-  }
-
-  // Fallback to simulated O/U
-  if (!result.ouRecord.data && recentGames.length >= 3) {
-    const simulatedOU = calculateOURecord(recentGames, sport)
-    if (simulatedOU) {
-      result.ouRecord = {
-        data: simulatedOU,
-        source: 'simulated',
-        isReal: false,
-        timestamp: now
-      }
-      logDataFetch('simulated', espnTeamId, true)
-    }
-  }
+  // NOTE: We no longer fall back to simulated data as it produces wildly inaccurate results
+  // (e.g., showing Wizards as 12-3 ATS when they're actually 20-26 ATS)
+  // If Covers.com fails, we simply return null/unavailable
 
   // === REST INFO ===
   // This is always calculated from game schedule (no external API needed)

@@ -1,7 +1,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { getTeamDetailedInfo, getTeamRoster, getNBAScoreboard, formatSalary } from '@/lib/espn'
-import PlayerCard from '@/components/PlayerCard'
+import { getTeamDetailedInfo, getNBAScoreboard } from '@/lib/espn'
+import { getActivePlayersByESPNTeam, BDLPlayer } from '@/lib/balldontlie'
+import BDLPlayerCard from '@/components/BDLPlayerCard'
 import GameCard from '@/components/GameCard'
 
 export const revalidate = 3600
@@ -12,7 +13,7 @@ export default async function NBATeamPage({ params }: { params: Promise<{ id: st
 
   const [teamInfo, roster, games] = await Promise.all([
     getTeamDetailedInfo('nba', teamId),
-    getTeamRoster('nba', teamId),
+    getActivePlayersByESPNTeam(teamId),
     getNBAScoreboard()
   ])
 
@@ -35,11 +36,21 @@ export default async function NBATeamPage({ params }: { params: Promise<{ id: st
     g => g.homeTeam.id === teamId || g.awayTeam.id === teamId
   )
 
-  // Group players by position
-  const guards = roster.filter(p => p.positionAbbr === 'G' || p.positionAbbr === 'PG' || p.positionAbbr === 'SG')
-  const forwards = roster.filter(p => p.positionAbbr === 'F' || p.positionAbbr === 'SF' || p.positionAbbr === 'PF')
-  const centers = roster.filter(p => p.positionAbbr === 'C')
-  const other = roster.filter(p => !['G', 'PG', 'SG', 'F', 'SF', 'PF', 'C'].includes(p.positionAbbr))
+  // Helper function to check if position contains a value
+  const hasPosition = (player: BDLPlayer, positions: string[]) => {
+    const pos = player.position?.toUpperCase() || ''
+    return positions.some(p => pos.includes(p))
+  }
+
+  // Group players by position (BDL positions: G, F, C, F-G, G-F, etc.)
+  const guards = roster.filter(p => hasPosition(p, ['G']) && !hasPosition(p, ['F']))
+  const forwards = roster.filter(p => hasPosition(p, ['F']) && !hasPosition(p, ['G']))
+  const centers = roster.filter(p => hasPosition(p, ['C']) && !hasPosition(p, ['G', 'F']))
+  const hybrid = roster.filter(p =>
+    (hasPosition(p, ['G']) && hasPosition(p, ['F'])) ||
+    (hasPosition(p, ['F']) && hasPosition(p, ['C']))
+  )
+  const other = roster.filter(p => !p.position)
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -129,7 +140,7 @@ export default async function NBATeamPage({ params }: { params: Promise<{ id: st
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {guards.map(player => (
-                <PlayerCard key={player.id} player={player} teamId={teamId} sport="nba" />
+                <BDLPlayerCard key={player.id} player={player} />
               ))}
             </div>
           </div>
@@ -144,7 +155,7 @@ export default async function NBATeamPage({ params }: { params: Promise<{ id: st
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {forwards.map(player => (
-                <PlayerCard key={player.id} player={player} teamId={teamId} sport="nba" />
+                <BDLPlayerCard key={player.id} player={player} />
               ))}
             </div>
           </div>
@@ -159,7 +170,22 @@ export default async function NBATeamPage({ params }: { params: Promise<{ id: st
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {centers.map(player => (
-                <PlayerCard key={player.id} player={player} teamId={teamId} sport="nba" />
+                <BDLPlayerCard key={player.id} player={player} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Hybrid positions (G-F, F-C) */}
+        {hybrid.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center space-x-2">
+              <span className="w-2 h-2 bg-purple-400 rounded-full" />
+              <span>Wings/Versatile ({hybrid.length})</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {hybrid.map(player => (
+                <BDLPlayerCard key={player.id} player={player} />
               ))}
             </div>
           </div>
@@ -174,7 +200,7 @@ export default async function NBATeamPage({ params }: { params: Promise<{ id: st
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {other.map(player => (
-                <PlayerCard key={player.id} player={player} teamId={teamId} sport="nba" />
+                <BDLPlayerCard key={player.id} player={player} />
               ))}
             </div>
           </div>

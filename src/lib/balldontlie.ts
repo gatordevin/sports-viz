@@ -2,7 +2,7 @@
 // Provides detailed NBA player stats, game logs, and season averages
 // API Documentation: https://www.balldontlie.io/
 
-const BALLDONTLIE_API_KEY = process.env.BALLDONTLIE_API_KEY || 'REDACTED_BDL_KEY_OLD'
+const BALLDONTLIE_API_KEY = process.env.BALLDONTLIE_API_KEY || 'REDACTED_BDL_KEY'
 const BALLDONTLIE_BASE = 'https://api.balldontlie.io/v1'
 
 // Types
@@ -260,22 +260,34 @@ export async function getPlayerStats(
   }
 }
 
-// Get season averages for players
+// Get season averages for a single player
+export async function getSeasonAverage(
+  season: number,
+  playerId: number
+): Promise<BDLSeasonAverage | null> {
+  try {
+    const response = await fetchBDL<{ data: BDLSeasonAverage[] }>('/season_averages', {
+      season: season.toString(),
+      player_id: playerId.toString()
+    })
+    return response?.data?.[0] ?? null
+  } catch (error) {
+    console.error('Error fetching season average:', error)
+    return null
+  }
+}
+
+// Get season averages for multiple players (fetches in parallel)
 export async function getSeasonAverages(
   season: number,
   playerIds: number[]
 ): Promise<BDLSeasonAverage[]> {
   try {
-    const params: Record<string, string> = {
-      season: season.toString()
-    }
-
-    playerIds.forEach(id => {
-      params['player_ids[]'] = id.toString()
-    })
-
-    const response = await fetchBDL<PaginatedResponse<BDLSeasonAverage>>('/season_averages', params)
-    return response?.data ?? []
+    // Fetch each player's stats in parallel
+    const promises = playerIds.map(id => getSeasonAverage(season, id))
+    const results = await Promise.all(promises)
+    // Filter out nulls and return
+    return results.filter((avg): avg is BDLSeasonAverage => avg !== null)
   } catch (error) {
     console.error('Error fetching season averages:', error)
     return []
@@ -307,3 +319,111 @@ export const POPULAR_PLAYER_IDS = {
   bookerDevin: 47,
   anthonyEdwards: 666969
 } as const
+
+// BallDontLie Team IDs (1-30 for current NBA teams)
+export const BDL_TEAM_IDS = {
+  hawks: 1, celtics: 2, nets: 3, hornets: 4, bulls: 5,
+  cavaliers: 6, mavericks: 7, nuggets: 8, pistons: 9, warriors: 10,
+  rockets: 11, pacers: 12, clippers: 13, lakers: 14, grizzlies: 15,
+  heat: 16, bucks: 17, timberwolves: 18, pelicans: 19, knicks: 20,
+  thunder: 21, magic: 22, sixers: 23, suns: 24, blazers: 25,
+  kings: 26, spurs: 27, raptors: 28, jazz: 29, wizards: 30
+} as const
+
+// ESPN Team ID to BallDontLie Team ID mapping
+// ESPN uses different IDs than BallDontLie
+export const ESPN_TO_BDL_TEAM_MAP: Record<string, number> = {
+  '1': 1,   // Hawks
+  '2': 2,   // Celtics
+  '17': 3,  // Nets
+  '30': 4,  // Hornets
+  '4': 5,   // Bulls
+  '5': 6,   // Cavaliers
+  '6': 7,   // Mavericks
+  '7': 8,   // Nuggets
+  '8': 9,   // Pistons
+  '9': 10,  // Warriors
+  '10': 11, // Rockets
+  '11': 12, // Pacers
+  '12': 13, // Clippers
+  '13': 14, // Lakers
+  '29': 15, // Grizzlies
+  '14': 16, // Heat
+  '15': 17, // Bucks
+  '16': 18, // Timberwolves
+  '3': 19,  // Pelicans
+  '18': 20, // Knicks
+  '25': 21, // Thunder
+  '19': 22, // Magic
+  '20': 23, // 76ers
+  '21': 24, // Suns
+  '22': 25, // Trail Blazers
+  '23': 26, // Kings
+  '24': 27, // Spurs
+  '28': 28, // Raptors
+  '26': 29, // Jazz
+  '27': 30  // Wizards
+}
+
+// BallDontLie Team ID to ESPN Team ID mapping (reverse of above)
+export const BDL_TO_ESPN_TEAM_MAP: Record<number, string> = {
+  1: '1',   // Hawks
+  2: '2',   // Celtics
+  3: '17',  // Nets
+  4: '30',  // Hornets
+  5: '4',   // Bulls
+  6: '5',   // Cavaliers
+  7: '6',   // Mavericks
+  8: '7',   // Nuggets
+  9: '8',   // Pistons
+  10: '9',  // Warriors
+  11: '10', // Rockets
+  12: '11', // Pacers
+  13: '12', // Clippers
+  14: '13', // Lakers
+  15: '29', // Grizzlies
+  16: '14', // Heat
+  17: '15', // Bucks
+  18: '16', // Timberwolves
+  19: '3',  // Pelicans
+  20: '18', // Knicks
+  21: '25', // Thunder
+  22: '19', // Magic
+  23: '20', // 76ers
+  24: '21', // Suns
+  25: '22', // Trail Blazers
+  26: '23', // Kings
+  27: '24', // Spurs
+  28: '28', // Raptors
+  29: '26', // Jazz
+  30: '27'  // Wizards
+}
+
+// Helper to convert BDL team ID to ESPN team ID
+export function bdlToEspnTeamId(bdlTeamId: number): string | null {
+  return BDL_TO_ESPN_TEAM_MAP[bdlTeamId] || null
+}
+
+// Get active players for a team (current roster)
+export async function getActivePlayersByTeam(teamId: number, perPage: number = 50): Promise<BDLPlayer[]> {
+  try {
+    const response = await fetchBDL<PaginatedResponse<BDLPlayer>>('/players/active', {
+      'team_ids[]': teamId.toString(),
+      per_page: perPage.toString()
+    })
+    return response?.data ?? []
+  } catch (error) {
+    console.error('Error fetching active players:', error)
+    return []
+  }
+}
+
+// Get active players by ESPN team ID (converts to BDL ID internally)
+export async function getActivePlayersByESPNTeam(espnTeamId: string): Promise<BDLPlayer[]> {
+  const bdlTeamId = ESPN_TO_BDL_TEAM_MAP[espnTeamId]
+  if (!bdlTeamId) {
+    console.error(`No BDL team mapping for ESPN team ID: ${espnTeamId}`)
+    return []
+  }
+  return getActivePlayersByTeam(bdlTeamId)
+}

@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { getPlayer, getSeasonAverages, getPlayerStats, BDLPlayer, BDLSeasonAverage, BDLPlayerStats } from '@/lib/balldontlie'
+import { getPlayer, getSeasonAverages, getPlayerStats, bdlToEspnTeamId, BDLPlayer, BDLSeasonAverage, BDLPlayerStats } from '@/lib/balldontlie'
 
 export const revalidate = 1800 // Revalidate every 30 minutes
 
@@ -143,6 +143,9 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
     new Date(b.game.date).getTime() - new Date(a.game.date).getTime()
   )
 
+  // Get ESPN team ID for team roster link
+  const espnTeamId = bdlToEspnTeamId(player.team.id)
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       {/* Player Header */}
@@ -180,7 +183,7 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
                 {player.position || 'N/A'}
               </span>
               <Link
-                href={`/nba/team/${player.team.id}`}
+                href={`/nba/team/${espnTeamId || player.team.id}`}
                 className="text-gray-300 hover:text-white transition-colors"
               >
                 {player.team.full_name}
@@ -316,7 +319,7 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
           <span>Search Players</span>
         </Link>
         <Link
-          href={`/nba/team/${player.team.id}`}
+          href={`/nba/team/${espnTeamId || player.team.id}`}
           className="inline-flex items-center space-x-2 text-gray-400 hover:text-primary transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

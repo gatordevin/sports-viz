@@ -1,5 +1,113 @@
-import { getNBAOdds, getNFLOdds, formatOdds, formatSpread, OddsEvent, oddsToPercentage, getProbabilityColor, getProbabilityBarColor, POPULAR_BOOKMAKERS } from '@/lib/odds'
+import { getNBAOdds, getNFLOdds, OddsEvent, formatOdds, oddsToPercentage, getProbabilityColor, getProbabilityBarColor } from '@/lib/odds'
+import {
+  findTeamIdByName,
+  getTeamInjuries,
+  getTeamRecentGames,
+  getTeamBettingStats,
+  getHeadToHead,
+  Injury,
+  RecentGame,
+  TeamBettingStats
+} from '@/lib/espn'
+import BettingCard from '@/components/BettingCard'
+import Image from 'next/image'
 
+export const revalidate = 300 // Revalidate every 5 minutes
+
+interface EnrichedTeamData {
+  id: string
+  name: string
+  abbreviation: string
+  logo: string
+  record: string
+  homeRecord: string
+  awayRecord: string
+  conferenceRank?: number
+  ppg: number
+  oppg: number
+  pointDiff: number
+  recentGames: RecentGame[]
+  injuries: Injury[]
+}
+
+interface EnrichedEvent {
+  event: OddsEvent
+  homeTeamData: EnrichedTeamData | null
+  awayTeamData: EnrichedTeamData | null
+  h2h: {
+    team1Wins: number
+    team2Wins: number
+    avgMargin: number
+  } | null
+  sport: 'nba' | 'nfl'
+}
+
+// Fetch enriched data for a team
+async function getEnrichedTeamData(
+  sport: 'nba' | 'nfl',
+  teamName: string
+): Promise<EnrichedTeamData | null> {
+  const teamId = findTeamIdByName(sport, teamName)
+  if (!teamId) return null
+
+  try {
+    const [stats, injuries, recentGames] = await Promise.all([
+      getTeamBettingStats(sport, teamId),
+      getTeamInjuries(sport, teamId),
+      getTeamRecentGames(sport, teamId, 10)
+    ])
+
+    if (!stats) return null
+
+    return {
+      id: teamId,
+      name: stats.teamName,
+      abbreviation: stats.abbreviation,
+      logo: stats.logo,
+      record: stats.record,
+      homeRecord: stats.homeRecord,
+      awayRecord: stats.awayRecord,
+      conferenceRank: stats.conferenceRank,
+      ppg: stats.pointsPerGame,
+      oppg: stats.pointsAllowedPerGame,
+      pointDiff: stats.pointDifferential,
+      recentGames,
+      injuries
+    }
+  } catch (error) {
+    console.error(`Error enriching team data for ${teamName}:`, error)
+    return null
+  }
+}
+
+// Enrich events with team data
+async function enrichEvents(events: OddsEvent[], sport: 'nba' | 'nfl'): Promise<EnrichedEvent[]> {
+  const enrichedEvents = await Promise.all(
+    events.map(async (event) => {
+      const [homeTeamData, awayTeamData] = await Promise.all([
+        getEnrichedTeamData(sport, event.home_team),
+        getEnrichedTeamData(sport, event.away_team)
+      ])
+
+      let h2h = null
+      if (homeTeamData && awayTeamData) {
+        h2h = await getHeadToHead(sport, awayTeamData.id, homeTeamData.id)
+      }
+
+      return {
+        event,
+        homeTeamData,
+        awayTeamData,
+        h2h,
+        sport
+      }
+    })
+  )
+
+  return enrichedEvents
+}
+
+// Simple probability bar for compact view
 function ProbabilityBar({ percentage, reverse = false }: { percentage: number; reverse?: boolean }) {
   const barColor = getProbabilityBarColor(percentage)
   return (
@@ -12,269 +120,239 @@ function ProbabilityBar({ percentage, reverse = false }: { percentage: number; r
   )
 }
 
-function OddsCard({ event }: { event: OddsEvent }) {
+// Compact odds card for mobile/overview
+function CompactOddsCard({ enrichedEvent }: { enrichedEvent: EnrichedEvent }) {
+  const { event, homeTeamData, awayTeamData, sport } = enrichedEvent
   const gameTime = new Date(event.commence_time)
   const isLive = gameTime <= new Date()
 
-  // Get DraftKings odds first, fall back to first available bookmaker
   const bookmaker = event.bookmakers.find(b => b.key === 'draftkings') || event.bookmakers[0]
-
-  if (!bookmaker) {
-    return null
-  }
+  if (!bookmaker) return null
 
   const h2hMarket = bookmaker.markets.find(m => m.key === 'h2h')
   const spreadMarket = bookmaker.markets.find(m => m.key === 'spreads')
-  const totalMarket = bookmaker.markets.find(m => m.key === 'totals')
 
   const homeH2h = h2hMarket?.outcomes.find(o => o.name === event.home_team)
   const awayH2h = h2hMarket?.outcomes.find(o => o.name === event.away_team)
-
-  const homeSpread = spreadMarket?.outcomes.find(o => o.name === event.home_team)
   const awaySpread = spreadMarket?.outcomes.find(o => o.name === event.away_team)
 
-  const over = totalMarket?.outcomes.find(o => o.name === 'Over')
-  const under = totalMarket?.outcomes.find(o => o.name === 'Under')
-
-  // Calculate win probabilities
-  const awayPercentage = awayH2h ? oddsToPercentage(awayH2h.price) : 0
-  const homePercentage = homeH2h ? oddsToPercentage(homeH2h.price) : 0
+  const awayPercentage = awayH2h ? oddsToPercentage(awayH2h.price) : 50
+  const homePercentage = homeH2h ? oddsToPercentage(homeH2h.price) : 50
 
   return (
-    <div className="glass-card rounded-xl p-4 sm:p-5 hover:bg-white/5 transition-all duration-300">
+    <div className="glass-card rounded-xl p-4 hover:bg-white/5 transition-all">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${sport === 'nba' ? 'bg-orange-500/20 text-orange-400' : 'bg-green-500/20 text-green-400'}`}>
+            {sport.toUpperCase()}
+          </span>
           {isLive ? (
-            <span className="px-2 py-1 text-xs font-semibold bg-red-500/20 text-red-400 rounded-full animate-pulse">
+            <span className="px-2 py-0.5 text-[10px] font-semibold bg-red-500/20 text-red-400 rounded animate-pulse">
               LIVE
             </span>
           ) : (
-            <span className="px-2 py-1 text-xs font-semibold bg-blue-500/20 text-blue-400 rounded-full">
-              {gameTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            <span className="text-xs text-gray-500">
+              {gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
-          <span className="text-xs text-gray-500">
-            {gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+        </div>
+        {awaySpread && (
+          <span className="text-xs font-mono text-gray-400">
+            {awaySpread.point! > 0 ? '+' : ''}{awaySpread.point}
+          </span>
+        )}
+      </div>
+
+      {/* Teams */}
+      <div className="space-y-2">
+        {/* Away */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            {awayTeamData?.logo && (
+              <div className="w-6 h-6 relative flex-shrink-0">
+                <Image src={awayTeamData.logo} alt="" fill className="object-contain" />
+              </div>
+            )}
+            <span className="text-sm text-white truncate">{event.away_team.split(' ').pop()}</span>
+            <span className="text-xs text-gray-500">{awayTeamData?.record || ''}</span>
+          </div>
+          <span className={`text-lg font-bold ${getProbabilityColor(awayPercentage)}`}>
+            {awayPercentage}%
           </span>
         </div>
-        <span className="text-xs text-gray-500">{bookmaker.title}</span>
-      </div>
 
-      {/* Main Matchup Display with Percentages */}
-      <div className="mb-4">
-        {/* Away Team */}
-        <div className="flex items-center justify-between py-3">
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-white text-sm sm:text-base truncate">{event.away_team}</p>
-            {awayH2h && (
-              <p className="text-xs text-gray-500 mt-0.5">{formatOdds(awayH2h.price)}</p>
-            )}
-          </div>
-          <div className="flex items-center space-x-3 ml-4">
-            {awayH2h && (
-              <span className={`text-xl sm:text-2xl font-bold ${getProbabilityColor(awayPercentage)}`}>
-                {awayPercentage}%
-              </span>
-            )}
-          </div>
+        {/* Probability bars */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1"><ProbabilityBar percentage={awayPercentage} reverse /></div>
+          <span className="text-[10px] text-gray-500">@</span>
+          <div className="flex-1"><ProbabilityBar percentage={homePercentage} /></div>
         </div>
 
-        {/* VS Probability Bar */}
-        <div className="flex items-center gap-2 py-2">
-          <div className="flex-1">
-            <ProbabilityBar percentage={awayPercentage} reverse />
-          </div>
-          <span className="text-xs text-gray-500 font-medium px-2">VS</span>
-          <div className="flex-1">
-            <ProbabilityBar percentage={homePercentage} />
-          </div>
-        </div>
-
-        {/* Home Team */}
-        <div className="flex items-center justify-between py-3">
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-white text-sm sm:text-base truncate">{event.home_team}</p>
-            {homeH2h && (
-              <p className="text-xs text-gray-500 mt-0.5">{formatOdds(homeH2h.price)}</p>
+        {/* Home */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            {homeTeamData?.logo && (
+              <div className="w-6 h-6 relative flex-shrink-0">
+                <Image src={homeTeamData.logo} alt="" fill className="object-contain" />
+              </div>
             )}
+            <span className="text-sm text-white truncate">{event.home_team.split(' ').pop()}</span>
+            <span className="text-xs text-gray-500">{homeTeamData?.record || ''}</span>
           </div>
-          <div className="flex items-center space-x-3 ml-4">
-            {homeH2h && (
-              <span className={`text-xl sm:text-2xl font-bold ${getProbabilityColor(homePercentage)}`}>
-                {homePercentage}%
-              </span>
-            )}
-          </div>
+          <span className={`text-lg font-bold ${getProbabilityColor(homePercentage)}`}>
+            {homePercentage}%
+          </span>
         </div>
       </div>
 
-      {/* Spread and Total */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10">
-        {/* Spread */}
-        {awaySpread && homeSpread && (
-          <div className="bg-white/5 rounded-lg p-3">
-            <p className="text-xs text-gray-400 mb-1.5">Spread</p>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs sm:text-sm">
-                <span className="text-gray-400 truncate">{event.away_team.split(' ').pop()}</span>
-                <span className="font-mono text-white ml-2">{awaySpread.point! > 0 ? '+' : ''}{awaySpread.point}</span>
-              </div>
-              <div className="flex justify-between text-xs sm:text-sm">
-                <span className="text-gray-400 truncate">{event.home_team.split(' ').pop()}</span>
-                <span className="font-mono text-white ml-2">{homeSpread.point! > 0 ? '+' : ''}{homeSpread.point}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Total */}
-        {over && under && (
-          <div className="bg-white/5 rounded-lg p-3">
-            <p className="text-xs text-gray-400 mb-1.5">Total</p>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs sm:text-sm">
-                <span className="text-gray-400">Over</span>
-                <span className="font-mono text-white">{over.point}</span>
-              </div>
-              <div className="flex justify-between text-xs sm:text-sm">
-                <span className="text-gray-400">Under</span>
-                <span className="font-mono text-white">{under.point}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Injury indicator */}
+      {((awayTeamData?.injuries.length || 0) > 0 || (homeTeamData?.injuries.length || 0) > 0) && (
+        <div className="mt-3 pt-2 border-t border-white/5 flex items-center gap-2 text-[10px] text-gray-500">
+          <svg className="w-3 h-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          {(awayTeamData?.injuries.length || 0) + (homeTeamData?.injuries.length || 0)} injuries reported
+        </div>
+      )}
     </div>
   )
 }
 
-function BookmakerComparison({ events }: { events: OddsEvent[] }) {
-  if (events.length === 0) return null
-
-  const event = events[0]
-  const bookmakers = event.bookmakers.slice(0, 5)
-
+// Sport filter tabs component
+function SportTabs({ active, onChange }: { active: 'all' | 'nba' | 'nfl'; onChange: (sport: 'all' | 'nba' | 'nfl') => void }) {
   return (
-    <div className="glass-card rounded-xl p-4 sm:p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">
-        Line Comparison: {event.away_team} @ {event.home_team}
-      </h3>
-      <div className="overflow-x-auto -mx-4 sm:mx-0">
-        <div className="min-w-[600px] px-4 sm:px-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/10">
-                <th className="py-2 px-3 text-left text-gray-400 font-medium">Book</th>
-                <th className="py-2 px-3 text-center text-gray-400 font-medium">
-                  <span className="hidden sm:inline">{event.away_team}</span>
-                  <span className="sm:hidden">{event.away_team.split(' ').pop()}</span>
-                </th>
-                <th className="py-2 px-3 text-center text-gray-400 font-medium">
-                  <span className="hidden sm:inline">{event.home_team}</span>
-                  <span className="sm:hidden">{event.home_team.split(' ').pop()}</span>
-                </th>
-                <th className="py-2 px-3 text-center text-gray-400 font-medium">Spread</th>
-                <th className="py-2 px-3 text-center text-gray-400 font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookmakers.map((bm) => {
-                const h2h = bm.markets.find(m => m.key === 'h2h')
-                const spread = bm.markets.find(m => m.key === 'spreads')
-                const total = bm.markets.find(m => m.key === 'totals')
+    <div className="flex gap-2">
+      {(['all', 'nba', 'nfl'] as const).map((sport) => (
+        <button
+          key={sport}
+          onClick={() => onChange(sport)}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            active === sport
+              ? 'bg-white/10 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          {sport === 'all' ? 'All Sports' : sport.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  )
+}
 
-                const awayML = h2h?.outcomes.find(o => o.name === event.away_team)
-                const homeML = h2h?.outcomes.find(o => o.name === event.home_team)
-                const awaySpread = spread?.outcomes.find(o => o.name === event.away_team)
-                const over = total?.outcomes.find(o => o.name === 'Over')
-
-                const awayPct = awayML ? oddsToPercentage(awayML.price) : 0
-                const homePct = homeML ? oddsToPercentage(homeML.price) : 0
-
-                return (
-                  <tr key={bm.key} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="py-3 px-3 text-white font-medium">{bm.title}</td>
-                    <td className="py-3 px-3 text-center">
-                      {awayML && (
-                        <div>
-                          <span className={`font-bold ${getProbabilityColor(awayPct)}`}>{awayPct}%</span>
-                          <span className="text-gray-500 text-xs ml-1">({formatOdds(awayML.price)})</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      {homeML && (
-                        <div>
-                          <span className={`font-bold ${getProbabilityColor(homePct)}`}>{homePct}%</span>
-                          <span className="text-gray-500 text-xs ml-1">({formatOdds(homeML.price)})</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-center font-mono text-white">
-                      {awaySpread && `${awaySpread.point! > 0 ? '+' : ''}${awaySpread.point}`}
-                    </td>
-                    <td className="py-3 px-3 text-center font-mono text-white">
-                      {over && over.point}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+// Legend component
+function ProbabilityLegend() {
+  return (
+    <div className="glass-card rounded-xl p-4">
+      <p className="text-sm text-gray-400 mb-3">Win Probability Guide:</p>
+      <div className="flex flex-wrap gap-x-6 gap-y-2">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+          <span className="text-xs text-gray-300">70%+ Strong Favorite</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <span className="text-xs text-gray-300">55-69% Favorite</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+          <span className="text-xs text-gray-300">45-54% Toss-up</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+          <span className="text-xs text-gray-300">30-44% Underdog</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+          <span className="text-xs text-gray-300">&lt;30% Long Shot</span>
         </div>
       </div>
     </div>
   )
 }
 
-export default async function OddsPage() {
+// Quick stats summary
+function QuickStats({ nbaCount, nflCount, totalInjuries }: { nbaCount: number; nflCount: number; totalInjuries: number }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="glass-card rounded-xl p-4">
+        <div className="text-2xl font-bold text-white">{nbaCount + nflCount}</div>
+        <div className="text-xs text-gray-400">Total Games</div>
+      </div>
+      <div className="glass-card rounded-xl p-4">
+        <div className="text-2xl font-bold text-orange-400">{nbaCount}</div>
+        <div className="text-xs text-gray-400">NBA Games</div>
+      </div>
+      <div className="glass-card rounded-xl p-4">
+        <div className="text-2xl font-bold text-green-400">{nflCount}</div>
+        <div className="text-xs text-gray-400">NFL Games</div>
+      </div>
+      <div className="glass-card rounded-xl p-4">
+        <div className="text-2xl font-bold text-yellow-400">{totalInjuries}</div>
+        <div className="text-xs text-gray-400">Injuries Reported</div>
+      </div>
+    </div>
+  )
+}
+
+export default async function BettingDashboard() {
+  // Fetch odds for both sports
   const [nbaOdds, nflOdds] = await Promise.all([
     getNBAOdds(),
     getNFLOdds()
   ])
 
-  const hasOdds = nbaOdds.length > 0 || nflOdds.length > 0
+  // Enrich with team data (injuries, stats, form)
+  const [enrichedNBA, enrichedNFL] = await Promise.all([
+    enrichEvents(nbaOdds, 'nba'),
+    enrichEvents(nflOdds, 'nfl')
+  ])
+
+  // Combine all events sorted by time
+  const allEnrichedEvents = [...enrichedNBA, ...enrichedNFL].sort((a, b) =>
+    new Date(a.event.commence_time).getTime() - new Date(b.event.commence_time).getTime()
+  )
+
+  const hasOdds = allEnrichedEvents.length > 0
+
+  // Calculate total injuries
+  const totalInjuries = allEnrichedEvents.reduce((sum, e) => {
+    return sum + (e.homeTeamData?.injuries.length || 0) + (e.awayTeamData?.injuries.length || 0)
+  }, 0)
+
+  // Group events by date
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const dayAfter = new Date(tomorrow)
+  dayAfter.setDate(dayAfter.getDate() + 1)
+
+  const todayEvents = allEnrichedEvents.filter(e => {
+    const eventDate = new Date(e.event.commence_time)
+    return eventDate >= today && eventDate < tomorrow
+  })
+
+  const tomorrowEvents = allEnrichedEvents.filter(e => {
+    const eventDate = new Date(e.event.commence_time)
+    return eventDate >= tomorrow && eventDate < dayAfter
+  })
+
+  const laterEvents = allEnrichedEvents.filter(e => {
+    const eventDate = new Date(e.event.commence_time)
+    return eventDate >= dayAfter
+  })
 
   return (
     <div className="min-h-screen bg-dark-950 pt-20 pb-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Betting Odds</h1>
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Betting Dashboard</h1>
           <p className="text-gray-400 text-sm sm:text-base">
-            Live odds with win probabilities from top sportsbooks
+            Complete betting analysis with odds, injuries, form, and key stats
           </p>
         </div>
-
-        {/* Legend */}
-        {hasOdds && (
-          <div className="glass-card rounded-xl p-4 mb-6">
-            <p className="text-sm text-gray-400 mb-3">Win Probability Key:</p>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-xs text-gray-300">70%+ (Strong Favorite)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                <span className="text-xs text-gray-300">55-69% (Favorite)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <span className="text-xs text-gray-300">45-54% (Toss-up)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                <span className="text-xs text-gray-300">30-44% (Underdog)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-xs text-gray-300">&lt;30% (Long Shot)</span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {!hasOdds ? (
           <div className="glass-card rounded-xl p-8 text-center">
@@ -300,48 +378,104 @@ export default async function OddsPage() {
           </div>
         ) : (
           <>
-            {/* Line Comparison for first game */}
-            {nbaOdds.length > 0 && (
-              <div className="mb-8">
-                <BookmakerComparison events={nbaOdds} />
-              </div>
-            )}
+            {/* Quick Stats */}
+            <div className="mb-6">
+              <QuickStats
+                nbaCount={enrichedNBA.length}
+                nflCount={enrichedNFL.length}
+                totalInjuries={totalInjuries}
+              />
+            </div>
 
-            {/* NBA Section */}
-            {nbaOdds.length > 0 && (
+            {/* Legend */}
+            <div className="mb-6">
+              <ProbabilityLegend />
+            </div>
+
+            {/* Today's Games - Full Cards */}
+            {todayEvents.length > 0 && (
               <section className="mb-10">
-                <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                    <span className="text-orange-400 font-bold text-sm">NBA</span>
-                  </div>
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-white">NBA Odds</h2>
-                    <p className="text-xs sm:text-sm text-gray-400">{nbaOdds.length} games available</p>
-                  </div>
+                <div className="flex items-center gap-3 mb-6">
+                  <h2 className="text-xl font-bold text-white">Today&apos;s Games</h2>
+                  <span className="px-2 py-1 text-xs font-medium bg-primary/20 text-primary rounded-full">
+                    {todayEvents.length} games
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {nbaOdds.map((event) => (
-                    <OddsCard key={event.id} event={event} />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {todayEvents.map((enrichedEvent) => (
+                    <BettingCard
+                      key={enrichedEvent.event.id}
+                      event={enrichedEvent.event}
+                      homeTeamData={enrichedEvent.homeTeamData}
+                      awayTeamData={enrichedEvent.awayTeamData}
+                      h2h={enrichedEvent.h2h || undefined}
+                      sport={enrichedEvent.sport}
+                    />
                   ))}
                 </div>
               </section>
             )}
 
-            {/* NFL Section */}
-            {nflOdds.length > 0 && (
+            {/* Tomorrow's Games - Full Cards */}
+            {tomorrowEvents.length > 0 && (
               <section className="mb-10">
-                <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                    <span className="text-green-400 font-bold text-sm">NFL</span>
-                  </div>
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-white">NFL Odds</h2>
-                    <p className="text-xs sm:text-sm text-gray-400">{nflOdds.length} games available</p>
-                  </div>
+                <div className="flex items-center gap-3 mb-6">
+                  <h2 className="text-xl font-bold text-white">Tomorrow</h2>
+                  <span className="px-2 py-1 text-xs font-medium bg-gray-500/20 text-gray-400 rounded-full">
+                    {tomorrowEvents.length} games
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {nflOdds.map((event) => (
-                    <OddsCard key={event.id} event={event} />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {tomorrowEvents.map((enrichedEvent) => (
+                    <BettingCard
+                      key={enrichedEvent.event.id}
+                      event={enrichedEvent.event}
+                      homeTeamData={enrichedEvent.homeTeamData}
+                      awayTeamData={enrichedEvent.awayTeamData}
+                      h2h={enrichedEvent.h2h || undefined}
+                      sport={enrichedEvent.sport}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Later Games - Compact Cards */}
+            {laterEvents.length > 0 && (
+              <section className="mb-10">
+                <div className="flex items-center gap-3 mb-6">
+                  <h2 className="text-xl font-bold text-white">Upcoming</h2>
+                  <span className="px-2 py-1 text-xs font-medium bg-gray-500/20 text-gray-400 rounded-full">
+                    {laterEvents.length} games
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {laterEvents.map((enrichedEvent) => (
+                    <CompactOddsCard key={enrichedEvent.event.id} enrichedEvent={enrichedEvent} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* No games today/tomorrow fallback */}
+            {todayEvents.length === 0 && tomorrowEvents.length === 0 && (
+              <section className="mb-10">
+                <div className="flex items-center gap-3 mb-6">
+                  <h2 className="text-xl font-bold text-white">All Upcoming Games</h2>
+                  <span className="px-2 py-1 text-xs font-medium bg-gray-500/20 text-gray-400 rounded-full">
+                    {allEnrichedEvents.length} games
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {allEnrichedEvents.slice(0, 10).map((enrichedEvent) => (
+                    <BettingCard
+                      key={enrichedEvent.event.id}
+                      event={enrichedEvent.event}
+                      homeTeamData={enrichedEvent.homeTeamData}
+                      awayTeamData={enrichedEvent.awayTeamData}
+                      h2h={enrichedEvent.h2h || undefined}
+                      sport={enrichedEvent.sport}
+                    />
                   ))}
                 </div>
               </section>
@@ -351,7 +485,7 @@ export default async function OddsPage() {
 
         {/* Footer info */}
         <div className="mt-10 text-center text-xs sm:text-sm text-gray-500">
-          <p>Odds provided by The Odds API. Lines update every 5 minutes.</p>
+          <p>Odds from DraftKings via The Odds API. Team data from ESPN. Lines update every 5 minutes.</p>
           <p className="mt-1">Always gamble responsibly. Must be 21+ in most states.</p>
         </div>
       </div>

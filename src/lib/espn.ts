@@ -337,14 +337,14 @@ export function formatSalary(salary: number): string {
   return `$${salary}`
 }
 
-// Get list of all team IDs
+// Get list of all team IDs - CORRECT ESPN API IDs
 export const NBA_TEAM_IDS = {
-  hawks: '1', celtics: '2', nets: '3', hornets: '4', bulls: '5',
-  cavaliers: '6', mavericks: '7', nuggets: '8', pistons: '9', warriors: '10',
-  rockets: '11', pacers: '12', clippers: '13', lakers: '14', grizzlies: '15',
-  heat: '16', bucks: '17', timberwolves: '18', pelicans: '19', knicks: '20',
-  thunder: '21', magic: '22', sixers: '23', suns: '24', blazers: '25',
-  kings: '26', spurs: '27', raptors: '28', jazz: '29', wizards: '30'
+  hawks: '1', celtics: '2', nets: '17', hornets: '30', bulls: '4',
+  cavaliers: '5', mavericks: '6', nuggets: '7', pistons: '8', warriors: '9',
+  rockets: '10', pacers: '11', clippers: '12', lakers: '13', grizzlies: '29',
+  heat: '14', bucks: '15', timberwolves: '16', pelicans: '3', knicks: '18',
+  thunder: '25', magic: '19', sixers: '20', suns: '21', blazers: '22',
+  kings: '23', spurs: '24', raptors: '28', jazz: '26', wizards: '27'
 } as const
 
 export const NFL_TEAM_IDS = {
@@ -373,27 +373,67 @@ export interface TeamInjuries {
   injuries: Injury[]
 }
 
-// Fetch team injuries
+// Fetch team injuries using ESPN Core API
 export async function getTeamInjuries(sport: 'nba' | 'nfl', teamId: string): Promise<Injury[]> {
-  const sportPath = sport === 'nba' ? 'basketball/nba' : 'football/nfl'
+  const league = sport === 'nba' ? 'nba' : 'nfl'
+  const sportPath = sport === 'nba' ? 'basketball' : 'football'
+
   try {
-    const res = await fetch(`${ESPN_BASE_URL}/${sportPath}/teams/${teamId}/injuries`, {
+    // Use the ESPN Core API which actually returns injury data
+    const coreApiUrl = `https://sports.core.api.espn.com/v2/sports/${sportPath}/leagues/${league}/teams/${teamId}/injuries`
+    const res = await fetch(coreApiUrl, {
       next: { revalidate: 900 } // 15 minutes
     })
 
     if (!res.ok) return []
 
     const data = await res.json()
-    if (!data.injuries) return []
 
-    return data.injuries.map((injury: any) => ({
-      playerId: injury.athlete?.id || '',
-      playerName: injury.athlete?.fullName || injury.athlete?.displayName || 'Unknown',
-      position: injury.athlete?.position?.abbreviation || '',
-      status: normalizeInjuryStatus(injury.status),
-      description: injury.details?.detail || injury.longComment || '',
-      isStarter: injury.athlete?.starter || false
-    }))
+    // The core API returns items with $ref links, we need to fetch each one
+    if (!data.items || data.items.length === 0) return []
+
+    // Fetch injury details in parallel (limit to first 10 to avoid too many requests)
+    const injuryPromises = data.items.slice(0, 10).map(async (item: any) => {
+      try {
+        // Fetch the injury detail
+        const injuryRes = await fetch(item.$ref, { next: { revalidate: 900 } })
+        if (!injuryRes.ok) return null
+        const injuryData = await injuryRes.json()
+
+        // Fetch the athlete detail to get name and position
+        let playerName = 'Unknown'
+        let position = ''
+
+        if (injuryData.athlete?.$ref) {
+          try {
+            const athleteRes = await fetch(injuryData.athlete.$ref, { next: { revalidate: 3600 } })
+            if (athleteRes.ok) {
+              const athleteData = await athleteRes.json()
+              playerName = athleteData.displayName || athleteData.fullName || 'Unknown'
+              position = athleteData.position?.abbreviation || athleteData.position?.name || ''
+            }
+          } catch {
+            // If we can't get athlete, use what we have
+          }
+        }
+
+        return {
+          playerId: injuryData.athlete?.$ref?.split('/athletes/')?.[1]?.split('/')?.[0] || '',
+          playerName,
+          position,
+          status: normalizeInjuryStatus(injuryData.status || injuryData.type?.description || ''),
+          description: injuryData.details?.detail
+            ? `${injuryData.details.side || ''} ${injuryData.details.type || ''} ${injuryData.details.detail || ''}`.trim()
+            : injuryData.shortComment || '',
+          isStarter: false
+        }
+      } catch {
+        return null
+      }
+    })
+
+    const injuries = await Promise.all(injuryPromises)
+    return injuries.filter((i): i is Injury => i !== null)
   } catch (error) {
     console.error(`Error fetching injuries for team ${teamId}:`, error)
     return []
@@ -595,49 +635,50 @@ export async function getHeadToHead(sport: 'nba' | 'nfl', team1Id: string, team2
   }
 }
 
-// Team name to ID mapping helper
+// Team name to ID mapping helper - CORRECT ESPN API IDs
 export function findTeamIdByName(sport: 'nba' | 'nfl', teamName: string): string | null {
   const normalizedName = teamName.toLowerCase().trim()
 
   if (sport === 'nba') {
-    // Common NBA team name variations
+    // Correct ESPN NBA team IDs (verified from ESPN API)
     const nbaMapping: Record<string, string> = {
       'atlanta hawks': '1', 'hawks': '1',
       'boston celtics': '2', 'celtics': '2',
-      'brooklyn nets': '3', 'nets': '3',
-      'charlotte hornets': '4', 'hornets': '4',
-      'chicago bulls': '5', 'bulls': '5',
-      'cleveland cavaliers': '6', 'cavaliers': '6', 'cavs': '6',
-      'dallas mavericks': '7', 'mavericks': '7', 'mavs': '7',
-      'denver nuggets': '8', 'nuggets': '8',
-      'detroit pistons': '9', 'pistons': '9',
-      'golden state warriors': '10', 'warriors': '10',
-      'houston rockets': '11', 'rockets': '11',
-      'indiana pacers': '12', 'pacers': '12',
-      'los angeles clippers': '13', 'la clippers': '13', 'clippers': '13',
-      'los angeles lakers': '14', 'la lakers': '14', 'lakers': '14',
-      'memphis grizzlies': '15', 'grizzlies': '15',
-      'miami heat': '16', 'heat': '16',
-      'milwaukee bucks': '17', 'bucks': '17',
-      'minnesota timberwolves': '18', 'timberwolves': '18', 'wolves': '18',
-      'new orleans pelicans': '19', 'pelicans': '19',
-      'new york knicks': '20', 'knicks': '20',
-      'oklahoma city thunder': '21', 'thunder': '21', 'okc thunder': '21',
-      'orlando magic': '22', 'magic': '22',
-      'philadelphia 76ers': '23', '76ers': '23', 'sixers': '23',
-      'phoenix suns': '24', 'suns': '24',
-      'portland trail blazers': '25', 'trail blazers': '25', 'blazers': '25',
-      'sacramento kings': '26', 'kings': '26',
-      'san antonio spurs': '27', 'spurs': '27',
+      'brooklyn nets': '17', 'nets': '17',
+      'charlotte hornets': '30', 'hornets': '30',
+      'chicago bulls': '4', 'bulls': '4',
+      'cleveland cavaliers': '5', 'cavaliers': '5', 'cavs': '5',
+      'dallas mavericks': '6', 'mavericks': '6', 'mavs': '6',
+      'denver nuggets': '7', 'nuggets': '7',
+      'detroit pistons': '8', 'pistons': '8',
+      'golden state warriors': '9', 'warriors': '9',
+      'houston rockets': '10', 'rockets': '10',
+      'indiana pacers': '11', 'pacers': '11',
+      'la clippers': '12', 'los angeles clippers': '12', 'clippers': '12',
+      'los angeles lakers': '13', 'la lakers': '13', 'lakers': '13',
+      'memphis grizzlies': '29', 'grizzlies': '29',
+      'miami heat': '14', 'heat': '14',
+      'milwaukee bucks': '15', 'bucks': '15',
+      'minnesota timberwolves': '16', 'timberwolves': '16', 'wolves': '16',
+      'new orleans pelicans': '3', 'pelicans': '3',
+      'new york knicks': '18', 'knicks': '18',
+      'oklahoma city thunder': '25', 'thunder': '25', 'okc thunder': '25',
+      'orlando magic': '19', 'magic': '19',
+      'philadelphia 76ers': '20', '76ers': '20', 'sixers': '20',
+      'phoenix suns': '21', 'suns': '21',
+      'portland trail blazers': '22', 'trail blazers': '22', 'blazers': '22',
+      'sacramento kings': '23', 'kings': '23',
+      'san antonio spurs': '24', 'spurs': '24',
       'toronto raptors': '28', 'raptors': '28',
-      'utah jazz': '29', 'jazz': '29',
-      'washington wizards': '30', 'wizards': '30'
+      'utah jazz': '26', 'jazz': '26',
+      'washington wizards': '27', 'wizards': '27'
     }
 
     return nbaMapping[normalizedName] || null
   }
 
   if (sport === 'nfl') {
+    // Correct ESPN NFL team IDs (verified from ESPN API)
     const nflMapping: Record<string, string> = {
       'arizona cardinals': '22', 'cardinals': '22',
       'atlanta falcons': '1', 'falcons': '1',

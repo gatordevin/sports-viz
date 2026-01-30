@@ -25,7 +25,16 @@ import {
   RealATSRecord,
   RealOURecord
 } from '@/lib/realBettingStats'
+import {
+  predictGame,
+  findValueBets,
+  GamePrediction,
+  ValueBet,
+  TeamPredictionData,
+  MarketOdds
+} from '@/lib/predictor'
 import BettingCard from '@/components/BettingCard'
+import { PredictionsSummary } from '@/components/PredictionBadge'
 import Image from 'next/image'
 
 export const revalidate = 300 // Revalidate every 5 minutes
@@ -63,6 +72,9 @@ interface EnrichedEvent {
   sport: 'nba' | 'nfl'
   homeLineMovement: LineMovement | null
   awayLineMovement: LineMovement | null
+  // Prediction data
+  prediction: GamePrediction | null
+  valueBets: ValueBet[]
 }
 
 // Fetch enriched data for a team
@@ -145,6 +157,51 @@ async function getEnrichedTeamData(
   }
 }
 
+// Convert EnrichedTeamData to TeamPredictionData for predictor
+function toTeamPredictionData(team: EnrichedTeamData, isHome: boolean): TeamPredictionData {
+  return {
+    id: team.id,
+    name: team.name,
+    ppg: team.ppg,
+    oppg: team.oppg,
+    pointDiff: team.pointDiff,
+    recentGames: team.recentGames,
+    atsRecord: team.atsRecord,
+    ouRecord: team.ouRecord,
+    restInfo: team.restInfo,
+    injuries: team.injuries.map(i => ({
+      status: i.status,
+      playerName: i.playerName,
+      position: i.position
+    })),
+    isHome
+  }
+}
+
+// Extract market odds from event
+function extractMarketOdds(event: OddsEvent): MarketOdds | null {
+  const bookmaker = event.bookmakers.find(b => b.key === 'draftkings') || event.bookmakers[0]
+  if (!bookmaker) return null
+
+  const spreadMarket = bookmaker.markets.find(m => m.key === 'spreads')
+  const totalMarket = bookmaker.markets.find(m => m.key === 'totals')
+  const h2hMarket = bookmaker.markets.find(m => m.key === 'h2h')
+
+  const homeSpread = spreadMarket?.outcomes.find(o => o.name === event.home_team)
+  const over = totalMarket?.outcomes.find(o => o.name === 'Over')
+  const homeML = h2hMarket?.outcomes.find(o => o.name === event.home_team)
+  const awayML = h2hMarket?.outcomes.find(o => o.name === event.away_team)
+
+  if (!homeSpread?.point || !over?.point) return null
+
+  return {
+    spread: homeSpread.point,
+    total: over.point,
+    homeMoneyline: homeML?.price || -110,
+    awayMoneyline: awayML?.price || -110
+  }
+}
+
 // Enrich events with team data
 async function enrichEvents(events: OddsEvent[], sport: 'nba' | 'nfl'): Promise<EnrichedEvent[]> {
   const enrichedEvents = await Promise.all(
@@ -165,6 +222,23 @@ async function enrichEvents(events: OddsEvent[], sport: 'nba' | 'nfl'): Promise<
       const homeLineMovement = detectLineMovement(event, 'home')
       const awayLineMovement = detectLineMovement(event, 'away')
 
+      // Calculate prediction if we have team data
+      let prediction: GamePrediction | null = null
+      let valueBets: ValueBet[] = []
+
+      if (homeTeamData && awayTeamData) {
+        const homePredData = toTeamPredictionData(homeTeamData, true)
+        const awayPredData = toTeamPredictionData(awayTeamData, false)
+
+        prediction = predictGame(homePredData, awayPredData, sport, h2h || undefined)
+
+        // Find value bets
+        const marketOdds = extractMarketOdds(event)
+        if (marketOdds && prediction) {
+          valueBets = findValueBets(prediction, marketOdds, event.id)
+        }
+      }
+
       return {
         event,
         homeTeamData,
@@ -172,7 +246,9 @@ async function enrichEvents(events: OddsEvent[], sport: 'nba' | 'nfl'): Promise<
         h2h,
         sport,
         homeLineMovement,
-        awayLineMovement
+        awayLineMovement,
+        prediction,
+        valueBets
       }
     })
   )
@@ -527,6 +603,36 @@ export default async function BettingDashboard() {
               <BettingStatsLegend />
             </div>
 
+            {/* Predictions Summary - NBA */}
+            {enrichedNBA.length > 0 && (
+              <PredictionsSummary
+                predictions={enrichedNBA
+                  .filter(e => e.prediction)
+                  .map(e => ({
+                    prediction: e.prediction!,
+                    valueBets: e.valueBets,
+                    gameId: e.event.id,
+                    gameTime: e.event.commence_time
+                  }))}
+                sport="nba"
+              />
+            )}
+
+            {/* Predictions Summary - NFL */}
+            {enrichedNFL.length > 0 && (
+              <PredictionsSummary
+                predictions={enrichedNFL
+                  .filter(e => e.prediction)
+                  .map(e => ({
+                    prediction: e.prediction!,
+                    valueBets: e.valueBets,
+                    gameId: e.event.id,
+                    gameTime: e.event.commence_time
+                  }))}
+                sport="nfl"
+              />
+            )}
+
             {/* Today's Games - Full Cards */}
             {todayEvents.length > 0 && (
               <section className="mb-10">
@@ -538,6 +644,11 @@ export default async function BettingDashboard() {
                   {todayEvents.some(e => e.homeTeamData?.restInfo?.isBackToBack || e.awayTeamData?.restInfo?.isBackToBack) && (
                     <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full">
                       B2B Alert
+                    </span>
+                  )}
+                  {todayEvents.some(e => e.valueBets.length > 0) && (
+                    <span className="px-2 py-1 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full">
+                      Value Bets
                     </span>
                   )}
                 </div>
@@ -552,6 +663,8 @@ export default async function BettingDashboard() {
                       sport={enrichedEvent.sport}
                       homeLineMovement={enrichedEvent.homeLineMovement}
                       awayLineMovement={enrichedEvent.awayLineMovement}
+                      prediction={enrichedEvent.prediction}
+                      valueBets={enrichedEvent.valueBets}
                     />
                   ))}
                 </div>
@@ -566,6 +679,11 @@ export default async function BettingDashboard() {
                   <span className="px-2 py-1 text-xs font-medium bg-gray-500/20 text-gray-400 rounded-full">
                     {tomorrowEvents.length} games
                   </span>
+                  {tomorrowEvents.some(e => e.valueBets.length > 0) && (
+                    <span className="px-2 py-1 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full">
+                      Value Bets
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {tomorrowEvents.map((enrichedEvent) => (
@@ -578,6 +696,8 @@ export default async function BettingDashboard() {
                       sport={enrichedEvent.sport}
                       homeLineMovement={enrichedEvent.homeLineMovement}
                       awayLineMovement={enrichedEvent.awayLineMovement}
+                      prediction={enrichedEvent.prediction}
+                      valueBets={enrichedEvent.valueBets}
                     />
                   ))}
                 </div>
@@ -621,6 +741,8 @@ export default async function BettingDashboard() {
                       sport={enrichedEvent.sport}
                       homeLineMovement={enrichedEvent.homeLineMovement}
                       awayLineMovement={enrichedEvent.awayLineMovement}
+                      prediction={enrichedEvent.prediction}
+                      valueBets={enrichedEvent.valueBets}
                     />
                   ))}
                 </div>
@@ -632,7 +754,8 @@ export default async function BettingDashboard() {
         {/* Footer info */}
         <div className="mt-10 text-center text-xs sm:text-sm text-gray-500">
           <p>Odds from DraftKings via The Odds API. Team data from ESPN. Lines update every 5 minutes.</p>
-          <p className="mt-1">ATS and O/U records are calculated from recent game performance.</p>
+          <p className="mt-1">Predictions based on power ratings, efficiency, form, injuries, rest, and H2H history.</p>
+          <p className="mt-1">Value bets shown when our model differs significantly from market lines.</p>
           <p className="mt-1">Always gamble responsibly. Must be 21+ in most states.</p>
         </div>
       </div>

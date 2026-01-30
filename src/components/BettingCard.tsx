@@ -17,6 +17,14 @@ import {
   calculateEfficiencyRatings,
   getRatingColor
 } from '@/lib/bettingStats'
+import {
+  GamePrediction,
+  ValueBet,
+  getConfidenceColor,
+  getConfidenceBgColor,
+  getEdgeColor,
+  formatSpread
+} from '@/lib/predictor'
 
 interface TeamData {
   id: string
@@ -51,6 +59,9 @@ interface BettingCardProps {
   sport: 'nba' | 'nfl'
   homeLineMovement?: LineMovement | null
   awayLineMovement?: LineMovement | null
+  // New prediction props
+  prediction?: GamePrediction | null
+  valueBets?: ValueBet[]
 }
 
 // Form indicator component - shows W/L for recent games
@@ -426,7 +437,9 @@ export default function BettingCard({
   h2h,
   sport,
   homeLineMovement,
-  awayLineMovement
+  awayLineMovement,
+  prediction,
+  valueBets = []
 }: BettingCardProps) {
   const gameTime = new Date(event.commence_time)
   const isLive = gameTime <= new Date()
@@ -499,6 +512,35 @@ export default function BettingCard({
           </div>
           <span className="text-xs text-gray-500">{bookmaker.title}</span>
         </div>
+
+        {/* Prediction Badge in Header */}
+        {prediction && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${getConfidenceBgColor(prediction.confidence)}`}>
+              <span className={`text-[10px] font-bold ${getConfidenceColor(prediction.confidence)}`}>
+                {prediction.confidence.toUpperCase()}
+              </span>
+              <span className="text-xs text-white font-medium">
+                {prediction.predictedWinner.split(' ').pop()}
+              </span>
+              <span className={`text-xs font-mono ${prediction.winProbability >= 60 ? 'text-green-400' : 'text-yellow-400'}`}>
+                {prediction.winProbability}%
+              </span>
+            </div>
+
+            {/* Value Bet Alert */}
+            {valueBets.length > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/30">
+                <svg className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                <span className="text-[10px] font-bold text-amber-400">VALUE</span>
+                <span className="text-[10px] text-white">{valueBets[0].recommendation}</span>
+                <span className={`text-[10px] font-mono ${getEdgeColor(valueBets[0].edge)}`}>+{valueBets[0].edge}pt</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Matchup */}
@@ -783,6 +825,100 @@ export default function BettingCard({
           <div className="text-gray-400">
             <span className="text-white font-mono">{homeTeamData.ppg.toFixed(1)}</span> :PPG
           </div>
+        </div>
+      )}
+
+      {/* Prediction Details Section */}
+      {prediction && (
+        <div className="px-3 sm:px-4 py-3 border-t border-white/10 bg-gradient-to-r from-primary/5 to-transparent">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span className="text-sm font-semibold text-white">Model Prediction</span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            {/* Power Ratings */}
+            <div className="space-y-1">
+              <span className="text-gray-400">Power Ratings</span>
+              <div className="flex items-center gap-2">
+                <span className={`font-mono font-bold ${prediction.powerRatings.away >= 105 ? 'text-green-400' : prediction.powerRatings.away >= 95 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {prediction.powerRatings.away.toFixed(1)}
+                </span>
+                <span className="text-gray-500">vs</span>
+                <span className={`font-mono font-bold ${prediction.powerRatings.home >= 105 ? 'text-green-400' : prediction.powerRatings.home >= 95 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {prediction.powerRatings.home.toFixed(1)}
+                </span>
+              </div>
+            </div>
+
+            {/* Our Spread */}
+            <div className="space-y-1">
+              <span className="text-gray-400">Our Spread</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-white font-bold">
+                  {formatSpread(prediction.predictedSpread)}
+                </span>
+                {homeSpread && Math.abs(homeSpread.point! - prediction.predictedSpread) >= 2 && (
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                    {Math.abs(homeSpread.point! - prediction.predictedSpread).toFixed(1)}pt diff
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Our Total */}
+            <div className="space-y-1">
+              <span className="text-gray-400">Our Total</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-white font-bold">
+                  {prediction.predictedTotal}
+                </span>
+                {over && Math.abs(over.point! - prediction.predictedTotal) >= 3 && (
+                  <span className={`text-[10px] px-1 py-0.5 rounded ${prediction.predictedTotal > over.point! ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {prediction.predictedTotal > over.point! ? 'OVER' : 'UNDER'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Predicted Score */}
+            <div className="space-y-1">
+              <span className="text-gray-400">Predicted Score</span>
+              <span className="font-mono text-white font-bold">
+                {prediction.predictedAwayScore} - {prediction.predictedHomeScore}
+              </span>
+            </div>
+          </div>
+
+          {/* Value Bets Detail */}
+          {valueBets.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <div className="flex items-center gap-1 mb-2">
+                <svg className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                <span className="text-xs font-semibold text-amber-400">Value Bets</span>
+              </div>
+              <div className="space-y-1.5">
+                {valueBets.slice(0, 2).map((bet, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getConfidenceBgColor(bet.confidence)} ${getConfidenceColor(bet.confidence)}`}>
+                        {bet.confidence.toUpperCase()}
+                      </span>
+                      <span className="text-white">{bet.recommendation}</span>
+                    </div>
+                    <span className={`font-mono font-bold ${getEdgeColor(bet.edge)}`}>
+                      +{bet.edge}pt edge
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-500 mt-2">{valueBets[0].explanation}</p>
+            </div>
+          )}
         </div>
       )}
 

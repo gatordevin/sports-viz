@@ -281,9 +281,11 @@ export function AlertsDropdown({ alerts, onMarkRead, onMarkAllRead, onClose, onV
 }
 
 // Helper
-function getTimeAgo(date: Date): string {
+function getTimeAgo(date: Date | string): string {
   const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+  // Handle both Date objects and ISO strings from JSON serialization
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  const diffMs = now.getTime() - dateObj.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMins / 60)
   const diffDays = Math.floor(diffHours / 24)

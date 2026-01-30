@@ -27,7 +27,7 @@ export interface Alert {
   message: string
   gameId: string
   priority: 'low' | 'medium' | 'high'
-  createdAt: Date
+  createdAt: Date | string // Can be string when received from JSON API
   read: boolean
   // Additional context
   betSide?: 'underdog' | 'favorite' | 'over' | 'under'
@@ -106,7 +106,10 @@ export function generateAlerts(
     const priorityOrder = { high: 0, medium: 1, low: 2 }
     const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
     if (priorityDiff !== 0) return priorityDiff
-    return b.createdAt.getTime() - a.createdAt.getTime()
+    // Handle both Date objects and ISO strings from JSON serialization
+    const aTime = typeof a.createdAt === 'string' ? new Date(a.createdAt).getTime() : a.createdAt.getTime()
+    const bTime = typeof b.createdAt === 'string' ? new Date(b.createdAt).getTime() : b.createdAt.getTime()
+    return bTime - aTime
   })
 }
 
@@ -264,9 +267,11 @@ export function formatAlertMessage(alert: Alert): string {
 /**
  * Get time ago string
  */
-function getTimeAgo(date: Date): string {
+function getTimeAgo(date: Date | string): string {
   const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+  // Handle both Date objects and ISO strings from JSON serialization
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  const diffMs = now.getTime() - dateObj.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMins / 60)
   const diffDays = Math.floor(diffHours / 24)

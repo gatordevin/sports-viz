@@ -138,7 +138,7 @@ function PlayersPageContent() {
       // Try the full query first
       const res = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(trimmedQuery)}&per_page=25`, {
         headers: {
-          'Authorization': 'REDACTED_BDL_KEY'
+          'Authorization': process.env.NEXT_PUBLIC_BALLDONTLIE_API_KEY || ''
         }
       })
 
@@ -153,7 +153,7 @@ function PlayersPageContent() {
         // Try first name search first
         const firstNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(firstName)}&per_page=25`, {
           headers: {
-            'Authorization': 'REDACTED_BDL_KEY'
+            'Authorization': process.env.NEXT_PUBLIC_BALLDONTLIE_API_KEY || ''
           }
         })
 
@@ -177,7 +177,7 @@ function PlayersPageContent() {
         if (data.data.length === 0) {
           const lastNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(nameParts[nameParts.length - 1])}&per_page=25`, {
             headers: {
-              'Authorization': 'REDACTED_BDL_KEY'
+              'Authorization': process.env.NEXT_PUBLIC_BALLDONTLIE_API_KEY || ''
             }
           })
           if (lastNameRes.ok) {
@@ -221,7 +221,7 @@ function PlayersPageContent() {
         try {
           const res = await fetch(`https://api.balldontlie.io/v1/season_averages?season=2024&player_id=${playerId}`, {
             headers: {
-              'Authorization': 'REDACTED_BDL_KEY'
+              'Authorization': process.env.NEXT_PUBLIC_BALLDONTLIE_API_KEY || ''
             }
           })
           if (!res.ok) return null

@@ -2,7 +2,7 @@
 // Provides detailed NBA player stats, game logs, and season averages
 // API Documentation: https://www.balldontlie.io/
 
-const BALLDONTLIE_API_KEY = process.env.BALLDONTLIE_API_KEY || 'REDACTED_BDL_KEY'
+const BALLDONTLIE_API_KEY = process.env.BALLDONTLIE_API_KEY || ''
 const BALLDONTLIE_BASE = 'https://api.balldontlie.io/v1'
 
 // Types

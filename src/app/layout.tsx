@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { ClerkProvider } from '@clerk/nextjs'
+import { dark } from '@clerk/themes'
 import './globals.css'
 import Navigation from '@/components/Navigation'
 
@@ -16,13 +18,25 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-dark-900 text-white`}>
-        <Navigation />
-        <main className="min-h-screen pt-16">
-          {children}
-        </main>
-      </body>
-    </html>
+    <ClerkProvider
+      appearance={{
+        baseTheme: dark,
+        variables: {
+          colorPrimary: '#10b981',
+          colorBackground: '#0a0a0f',
+          colorInputBackground: '#1a1a24',
+          colorInputText: '#ffffff',
+        },
+      }}
+    >
+      <html lang="en">
+        <body className={`${inter.className} bg-dark-900 text-white`}>
+          <Navigation />
+          <main className="min-h-screen pt-16">
+            {children}
+          </main>
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

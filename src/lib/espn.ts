@@ -237,7 +237,27 @@ export async function getTeamRoster(sport: 'nba' | 'nfl', teamId: string): Promi
 
   if (!data.athletes) return []
 
-  return data.athletes.map((athlete: any) => ({
+  // NFL roster structure is different - athletes are grouped by position (offense, defense, specialTeams)
+  // NBA roster has athletes directly in the array
+  // Check if we have position groups (NFL) or direct athletes (NBA)
+  let athletes: any[] = []
+
+  if (Array.isArray(data.athletes) && data.athletes.length > 0) {
+    // Check if the first item has 'items' (NFL structure) or is an athlete directly (NBA)
+    if (data.athletes[0].items) {
+      // NFL structure: athletes is array of position groups, each with items array
+      data.athletes.forEach((positionGroup: any) => {
+        if (positionGroup.items && Array.isArray(positionGroup.items)) {
+          athletes.push(...positionGroup.items)
+        }
+      })
+    } else {
+      // NBA structure: athletes is directly an array of player objects
+      athletes = data.athletes
+    }
+  }
+
+  return athletes.map((athlete: any) => ({
     id: athlete.id,
     fullName: athlete.fullName,
     firstName: athlete.firstName,

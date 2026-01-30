@@ -128,15 +128,46 @@ function PlayersPageContent() {
     setError(null)
 
     try {
-      const res = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(query)}&per_page=25`, {
+      // BallDontLie API works better with single words (first or last name)
+      // If a full name is provided (contains space), try first name first, then last name
+      const trimmedQuery = query.trim()
+      const nameParts = trimmedQuery.split(/\s+/)
+
+      let data: any = null
+
+      // Try the full query first
+      const res = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(trimmedQuery)}&per_page=25`, {
         headers: {
           'Authorization': 'REDACTED_BDL_KEY_OLD'
         }
       })
 
       if (!res.ok) throw new Error('Failed to search players')
+      data = await res.json()
 
-      const data = await res.json()
+      // If no results and query has multiple words, try searching by last name (usually more unique)
+      if (data.data.length === 0 && nameParts.length > 1) {
+        const lastName = nameParts[nameParts.length - 1]
+        const lastNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(lastName)}&per_page=25`, {
+          headers: {
+            'Authorization': 'REDACTED_BDL_KEY_OLD'
+          }
+        })
+        if (lastNameRes.ok) {
+          const lastNameData = await lastNameRes.json()
+          // Filter results to match the first name too for better accuracy
+          const firstName = nameParts[0].toLowerCase()
+          data.data = lastNameData.data.filter((p: BDLPlayer) =>
+            p.first_name.toLowerCase().includes(firstName) ||
+            firstName.includes(p.first_name.toLowerCase())
+          )
+          // If still no results, just use the last name search results
+          if (data.data.length === 0) {
+            data = lastNameData
+          }
+        }
+      }
+
       setPlayers(data.data)
 
       // Fetch season averages for found players

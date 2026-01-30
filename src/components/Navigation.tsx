@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
+import { isProUser } from '@/lib/admin'
 
 const navItems = [
   { name: 'Dashboard', href: '/' },
@@ -13,6 +14,9 @@ const navItems = [
 
 export default function Navigation() {
   const pathname = usePathname()
+  const { user } = useUser()
+  const userEmail = user?.primaryEmailAddress?.emailAddress
+  const isPro = isProUser(userEmail)
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-900/80 backdrop-blur-lg border-b border-white/5">
@@ -75,12 +79,21 @@ export default function Navigation() {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
-              <Link
-                href="/pricing"
-                className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-primary to-secondary rounded-lg hover:opacity-90 transition-opacity"
-              >
-                Upgrade to Pro
-              </Link>
+              {isPro ? (
+                <span className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Pro
+                </span>
+              ) : (
+                <Link
+                  href="/pricing"
+                  className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-primary to-secondary rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Upgrade to Pro
+                </Link>
+              )}
               <UserButton
                 afterSignOutUrl="/"
                 appearance={{

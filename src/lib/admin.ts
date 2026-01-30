@@ -8,6 +8,7 @@
 // Whitelisted email addresses that get Pro access automatically
 export const PRO_WHITELIST: string[] = [
   'gatordevin@gmail.com',
+  'football2nick@gmail.com',
 ]
 
 /**

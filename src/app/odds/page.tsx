@@ -19,6 +19,12 @@ import {
   RestInfo,
   LineMovement
 } from '@/lib/bettingStats'
+import {
+  calculateRealATSRecord,
+  calculateRealOURecord,
+  RealATSRecord,
+  RealOURecord
+} from '@/lib/realBettingStats'
 import BettingCard from '@/components/BettingCard'
 import Image from 'next/image'
 
@@ -38,10 +44,11 @@ interface EnrichedTeamData {
   pointDiff: number
   recentGames: RecentGame[]
   injuries: Injury[]
-  // New betting stats
-  atsRecord?: ATSRecord
-  ouRecord?: OURecord
+  // Betting stats - can be real (from BallDontLie) or simulated
+  atsRecord?: ATSRecord | RealATSRecord
+  ouRecord?: OURecord | RealOURecord
   restInfo?: RestInfo
+  isRealBettingData?: boolean // Flag to indicate if this is real data from BallDontLie
 }
 
 interface EnrichedEvent {
@@ -76,10 +83,42 @@ async function getEnrichedTeamData(
 
     if (!stats) return null
 
-    // Calculate betting-specific stats
-    const atsRecord = calculateATSRecord(recentGames)
-    const ouRecord = calculateOURecord(recentGames, sport)
+    // Calculate rest info (this works for both NBA and NFL)
     const restInfo = calculateRestInfo(recentGames, gameDate)
+
+    // For NBA: Use REAL betting stats from BallDontLie API (which has actual historical spreads)
+    // For NFL: Fall back to simulated stats (BallDontLie doesn't have NFL betting data)
+    let atsRecord: ATSRecord | RealATSRecord
+    let ouRecord: OURecord | RealOURecord
+    let isRealBettingData = false
+
+    if (sport === 'nba') {
+      // Fetch real ATS/O/U records from BallDontLie (uses actual historical spreads)
+      const [realATS, realOU] = await Promise.all([
+        calculateRealATSRecord(teamId, 15),
+        calculateRealOURecord(teamId, 15)
+      ])
+
+      // Only use real data if we actually got meaningful results
+      if (realATS.isRealData && realATS.wins + realATS.losses > 0) {
+        atsRecord = realATS
+        isRealBettingData = true
+      } else {
+        // Fall back to simulated if real data unavailable
+        atsRecord = calculateATSRecord(recentGames)
+      }
+
+      if (realOU.isRealData && realOU.overs + realOU.unders > 0) {
+        ouRecord = realOU
+        isRealBettingData = true
+      } else {
+        ouRecord = calculateOURecord(recentGames, sport)
+      }
+    } else {
+      // NFL: Use simulated stats (no real betting data available)
+      atsRecord = calculateATSRecord(recentGames)
+      ouRecord = calculateOURecord(recentGames, sport)
+    }
 
     return {
       id: teamId,
@@ -97,7 +136,8 @@ async function getEnrichedTeamData(
       injuries,
       atsRecord,
       ouRecord,
-      restInfo
+      restInfo,
+      isRealBettingData
     }
   } catch (error) {
     console.error(`Error enriching team data for ${teamName}:`, error)

@@ -32,10 +32,11 @@ interface TeamData {
   pointDiff: number
   recentGames: RecentGame[]
   injuries: Injury[]
-  // New betting stats
+  // Betting stats - can be real (from BallDontLie) or simulated
   atsRecord?: ATSRecord
   ouRecord?: OURecord
   restInfo?: RestInfo
+  isRealBettingData?: boolean // True if ATS/OU data is from real historical spreads
 }
 
 interface BettingCardProps {
@@ -325,9 +326,22 @@ function BettingStatsRow({ teamData, isHome, sport }: { teamData: TeamData; isHo
   // Get ATS and OU records - always show if teamData exists
   const atsRecord = teamData.atsRecord
   const ouRecord = teamData.ouRecord
+  const isRealData = teamData.isRealBettingData
 
   return (
     <div className="space-y-1.5 sm:space-y-2 text-[10px] sm:text-xs">
+      {/* Real Data Badge - shows when using actual historical spreads */}
+      {isRealData && (
+        <div className="flex items-center gap-1 mb-1">
+          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-green-500/20 text-green-400 flex items-center gap-0.5">
+            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            REAL DATA
+          </span>
+        </div>
+      )}
+
       {/* ATS Record - Always show */}
       {atsRecord && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-0">

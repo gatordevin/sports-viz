@@ -27,29 +27,41 @@ export default function GameCard({ game }: GameCardProps) {
     })
   }
 
+  const awayWinning = !isScheduled && parseInt(game.awayScore) > parseInt(game.homeScore)
+  const homeWinning = !isScheduled && parseInt(game.homeScore) > parseInt(game.awayScore)
+
   return (
-    <div className="glass rounded-xl p-4 hover:bg-white/[0.08] transition-all duration-300 animate-fade-in">
-      <div className="flex items-center justify-between mb-3">
+    <div className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300 animate-fade-in min-h-[180px]">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           {isLive && (
-            <span className="flex items-center space-x-1">
+            <span className="flex items-center space-x-1.5 px-2 py-1 bg-red-500/20 rounded-full">
               <span className="w-2 h-2 bg-red-500 rounded-full live-pulse" />
-              <span className="text-xs font-medium text-red-500">LIVE</span>
+              <span className="text-xs font-semibold text-red-400">LIVE</span>
             </span>
           )}
           {game.broadcast && (
-            <span className="text-xs text-gray-500">{game.broadcast}</span>
+            <span className="text-xs text-gray-500 hidden sm:inline">{game.broadcast}</span>
           )}
         </div>
-        <span className={`text-xs font-medium ${isLive ? 'text-red-400' : 'text-gray-400'}`}>
+        <span className={`text-xs sm:text-sm font-medium px-2 py-1 rounded-full ${
+          isLive
+            ? 'bg-red-500/10 text-red-400'
+            : isFinished
+            ? 'bg-gray-500/20 text-gray-400'
+            : 'bg-blue-500/10 text-blue-400'
+        }`}>
           {formatGameTime()}
         </span>
       </div>
 
       {/* Away Team */}
-      <div className="flex items-center justify-between py-2">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 relative">
+      <div className={`flex items-center justify-between py-2.5 sm:py-3 rounded-lg px-2 -mx-2 transition-colors ${
+        awayWinning ? 'bg-green-500/5' : ''
+      }`}>
+        <div className="flex items-center space-x-3 min-w-0 flex-1">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 relative flex-shrink-0">
             {game.awayTeam.logo && (
               <Image
                 src={game.awayTeam.logo}
@@ -59,24 +71,26 @@ export default function GameCard({ game }: GameCardProps) {
               />
             )}
           </div>
-          <div>
-            <p className="font-semibold text-white">{game.awayTeam.abbreviation}</p>
-            <p className="text-xs text-gray-500">{game.awayTeam.record}</p>
+          <div className="min-w-0">
+            <p className={`font-semibold text-sm sm:text-base truncate ${awayWinning ? 'text-white' : 'text-gray-300'}`}>
+              {game.awayTeam.abbreviation}
+            </p>
+            <p className="text-xs text-gray-500 truncate">{game.awayTeam.record}</p>
           </div>
         </div>
-        <span className={`text-2xl font-bold ${
-          !isScheduled && parseInt(game.awayScore) > parseInt(game.homeScore)
-            ? 'text-white'
-            : 'text-gray-500'
+        <span className={`text-2xl sm:text-3xl font-bold ml-4 ${
+          awayWinning ? 'text-white' : 'text-gray-500'
         }`}>
           {isScheduled ? '-' : game.awayScore}
         </span>
       </div>
 
       {/* Home Team */}
-      <div className="flex items-center justify-between py-2">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 relative">
+      <div className={`flex items-center justify-between py-2.5 sm:py-3 rounded-lg px-2 -mx-2 transition-colors ${
+        homeWinning ? 'bg-green-500/5' : ''
+      }`}>
+        <div className="flex items-center space-x-3 min-w-0 flex-1">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 relative flex-shrink-0">
             {game.homeTeam.logo && (
               <Image
                 src={game.homeTeam.logo}
@@ -86,22 +100,23 @@ export default function GameCard({ game }: GameCardProps) {
               />
             )}
           </div>
-          <div>
-            <p className="font-semibold text-white">{game.homeTeam.abbreviation}</p>
-            <p className="text-xs text-gray-500">{game.homeTeam.record}</p>
+          <div className="min-w-0">
+            <p className={`font-semibold text-sm sm:text-base truncate ${homeWinning ? 'text-white' : 'text-gray-300'}`}>
+              {game.homeTeam.abbreviation}
+            </p>
+            <p className="text-xs text-gray-500 truncate">{game.homeTeam.record}</p>
           </div>
         </div>
-        <span className={`text-2xl font-bold ${
-          !isScheduled && parseInt(game.homeScore) > parseInt(game.awayScore)
-            ? 'text-white'
-            : 'text-gray-500'
+        <span className={`text-2xl sm:text-3xl font-bold ml-4 ${
+          homeWinning ? 'text-white' : 'text-gray-500'
         }`}>
           {isScheduled ? '-' : game.homeScore}
         </span>
       </div>
 
+      {/* Venue - hidden on very small screens */}
       {game.venue && (
-        <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-white/5">
+        <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-white/5 truncate hidden sm:block">
           {game.venue}
         </p>
       )}

@@ -177,3 +177,41 @@ export const POPULAR_BOOKMAKERS = {
   bovada: 'Bovada',
   betonlineag: 'BetOnline.ag'
 } as const
+
+// Convert American odds to implied probability percentage
+export function oddsToPercentage(odds: number): number {
+  if (odds < 0) {
+    // Negative odds (favorites): probability = (-odds) / ((-odds) + 100)
+    return Math.round((-odds / (-odds + 100)) * 100)
+  } else {
+    // Positive odds (underdogs): probability = 100 / (odds + 100)
+    return Math.round((100 / (odds + 100)) * 100)
+  }
+}
+
+// Get color class based on win probability
+export function getProbabilityColor(percentage: number): string {
+  if (percentage >= 70) return 'text-green-400'
+  if (percentage >= 55) return 'text-emerald-400'
+  if (percentage >= 45) return 'text-yellow-400'
+  if (percentage >= 30) return 'text-orange-400'
+  return 'text-red-400'
+}
+
+// Get background gradient based on win probability
+export function getProbabilityGradient(percentage: number): string {
+  if (percentage >= 70) return 'from-green-500/20 to-green-500/5'
+  if (percentage >= 55) return 'from-emerald-500/20 to-emerald-500/5'
+  if (percentage >= 45) return 'from-yellow-500/15 to-yellow-500/5'
+  if (percentage >= 30) return 'from-orange-500/15 to-orange-500/5'
+  return 'from-red-500/15 to-red-500/5'
+}
+
+// Get bar color class based on win probability
+export function getProbabilityBarColor(percentage: number): string {
+  if (percentage >= 70) return 'bg-green-500'
+  if (percentage >= 55) return 'bg-emerald-500'
+  if (percentage >= 45) return 'bg-yellow-500'
+  if (percentage >= 30) return 'bg-orange-500'
+  return 'bg-red-500'
+}

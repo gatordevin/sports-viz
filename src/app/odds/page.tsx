@@ -1,4 +1,16 @@
-import { getNBAOdds, getNFLOdds, formatOdds, formatSpread, OddsEvent, POPULAR_BOOKMAKERS } from '@/lib/odds'
+import { getNBAOdds, getNFLOdds, formatOdds, formatSpread, OddsEvent, oddsToPercentage, getProbabilityColor, getProbabilityBarColor, POPULAR_BOOKMAKERS } from '@/lib/odds'
+
+function ProbabilityBar({ percentage, reverse = false }: { percentage: number; reverse?: boolean }) {
+  const barColor = getProbabilityBarColor(percentage)
+  return (
+    <div className={`h-2 w-full bg-white/10 rounded-full overflow-hidden ${reverse ? 'rotate-180' : ''}`}>
+      <div
+        className={`h-full ${barColor} transition-all duration-500`}
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  )
+}
 
 function OddsCard({ event }: { event: OddsEvent }) {
   const gameTime = new Date(event.commence_time)
@@ -24,8 +36,12 @@ function OddsCard({ event }: { event: OddsEvent }) {
   const over = totalMarket?.outcomes.find(o => o.name === 'Over')
   const under = totalMarket?.outcomes.find(o => o.name === 'Under')
 
+  // Calculate win probabilities
+  const awayPercentage = awayH2h ? oddsToPercentage(awayH2h.price) : 0
+  const homePercentage = homeH2h ? oddsToPercentage(homeH2h.price) : 0
+
   return (
-    <div className="glass-card rounded-xl p-4 hover:bg-white/5 transition-all duration-300">
+    <div className="glass-card rounded-xl p-4 sm:p-5 hover:bg-white/5 transition-all duration-300">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
@@ -45,59 +61,90 @@ function OddsCard({ event }: { event: OddsEvent }) {
         <span className="text-xs text-gray-500">{bookmaker.title}</span>
       </div>
 
-      {/* Teams */}
-      <div className="space-y-3">
+      {/* Main Matchup Display with Percentages */}
+      <div className="mb-4">
         {/* Away Team */}
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-white">{event.away_team}</span>
-          <div className="flex items-center space-x-4 text-sm">
-            {awaySpread && (
-              <span className={`font-mono ${awaySpread.price > 0 ? 'text-green-400' : 'text-white'}`}>
-                {formatSpread(awaySpread.point, awaySpread.price)}
-              </span>
-            )}
+        <div className="flex items-center justify-between py-3">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-white text-sm sm:text-base truncate">{event.away_team}</p>
             {awayH2h && (
-              <span className={`font-mono w-16 text-right ${awayH2h.price > 0 ? 'text-green-400' : 'text-white'}`}>
-                {formatOdds(awayH2h.price)}
+              <p className="text-xs text-gray-500 mt-0.5">{formatOdds(awayH2h.price)}</p>
+            )}
+          </div>
+          <div className="flex items-center space-x-3 ml-4">
+            {awayH2h && (
+              <span className={`text-xl sm:text-2xl font-bold ${getProbabilityColor(awayPercentage)}`}>
+                {awayPercentage}%
               </span>
             )}
           </div>
         </div>
 
+        {/* VS Probability Bar */}
+        <div className="flex items-center gap-2 py-2">
+          <div className="flex-1">
+            <ProbabilityBar percentage={awayPercentage} reverse />
+          </div>
+          <span className="text-xs text-gray-500 font-medium px-2">VS</span>
+          <div className="flex-1">
+            <ProbabilityBar percentage={homePercentage} />
+          </div>
+        </div>
+
         {/* Home Team */}
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-white">{event.home_team}</span>
-          <div className="flex items-center space-x-4 text-sm">
-            {homeSpread && (
-              <span className={`font-mono ${homeSpread.price > 0 ? 'text-green-400' : 'text-white'}`}>
-                {formatSpread(homeSpread.point, homeSpread.price)}
-              </span>
-            )}
+        <div className="flex items-center justify-between py-3">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-white text-sm sm:text-base truncate">{event.home_team}</p>
             {homeH2h && (
-              <span className={`font-mono w-16 text-right ${homeH2h.price > 0 ? 'text-green-400' : 'text-white'}`}>
-                {formatOdds(homeH2h.price)}
+              <p className="text-xs text-gray-500 mt-0.5">{formatOdds(homeH2h.price)}</p>
+            )}
+          </div>
+          <div className="flex items-center space-x-3 ml-4">
+            {homeH2h && (
+              <span className={`text-xl sm:text-2xl font-bold ${getProbabilityColor(homePercentage)}`}>
+                {homePercentage}%
               </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Total */}
-      {over && under && (
-        <div className="mt-4 pt-3 border-t border-white/10">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">Total</span>
-            <div className="flex items-center space-x-4 font-mono">
-              <span className="text-white">
-                O {over.point} <span className="text-gray-400">({formatOdds(over.price)})</span>
-              </span>
-              <span className="text-white">
-                U {under.point} <span className="text-gray-400">({formatOdds(under.price)})</span>
-              </span>
+      {/* Spread and Total */}
+      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10">
+        {/* Spread */}
+        {awaySpread && homeSpread && (
+          <div className="bg-white/5 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-1.5">Spread</p>
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs sm:text-sm">
+                <span className="text-gray-400 truncate">{event.away_team.split(' ').pop()}</span>
+                <span className="font-mono text-white ml-2">{awaySpread.point! > 0 ? '+' : ''}{awaySpread.point}</span>
+              </div>
+              <div className="flex justify-between text-xs sm:text-sm">
+                <span className="text-gray-400 truncate">{event.home_team.split(' ').pop()}</span>
+                <span className="font-mono text-white ml-2">{homeSpread.point! > 0 ? '+' : ''}{homeSpread.point}</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Total */}
+        {over && under && (
+          <div className="bg-white/5 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-1.5">Total</p>
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs sm:text-sm">
+                <span className="text-gray-400">Over</span>
+                <span className="font-mono text-white">{over.point}</span>
+              </div>
+              <div className="flex justify-between text-xs sm:text-sm">
+                <span className="text-gray-400">Under</span>
+                <span className="font-mono text-white">{under.point}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -109,60 +156,73 @@ function BookmakerComparison({ events }: { events: OddsEvent[] }) {
   const bookmakers = event.bookmakers.slice(0, 5)
 
   return (
-    <div className="glass-card rounded-xl p-6">
+    <div className="glass-card rounded-xl p-4 sm:p-6">
       <h3 className="text-lg font-semibold text-white mb-4">
         Line Comparison: {event.away_team} @ {event.home_team}
       </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-white/10">
-              <th className="py-2 px-3 text-left text-gray-400 font-medium">Book</th>
-              <th className="py-2 px-3 text-center text-gray-400 font-medium">{event.away_team}</th>
-              <th className="py-2 px-3 text-center text-gray-400 font-medium">{event.home_team}</th>
-              <th className="py-2 px-3 text-center text-gray-400 font-medium">Spread</th>
-              <th className="py-2 px-3 text-center text-gray-400 font-medium">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookmakers.map((bm) => {
-              const h2h = bm.markets.find(m => m.key === 'h2h')
-              const spread = bm.markets.find(m => m.key === 'spreads')
-              const total = bm.markets.find(m => m.key === 'totals')
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="min-w-[600px] px-4 sm:px-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="py-2 px-3 text-left text-gray-400 font-medium">Book</th>
+                <th className="py-2 px-3 text-center text-gray-400 font-medium">
+                  <span className="hidden sm:inline">{event.away_team}</span>
+                  <span className="sm:hidden">{event.away_team.split(' ').pop()}</span>
+                </th>
+                <th className="py-2 px-3 text-center text-gray-400 font-medium">
+                  <span className="hidden sm:inline">{event.home_team}</span>
+                  <span className="sm:hidden">{event.home_team.split(' ').pop()}</span>
+                </th>
+                <th className="py-2 px-3 text-center text-gray-400 font-medium">Spread</th>
+                <th className="py-2 px-3 text-center text-gray-400 font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookmakers.map((bm) => {
+                const h2h = bm.markets.find(m => m.key === 'h2h')
+                const spread = bm.markets.find(m => m.key === 'spreads')
+                const total = bm.markets.find(m => m.key === 'totals')
 
-              const awayML = h2h?.outcomes.find(o => o.name === event.away_team)
-              const homeML = h2h?.outcomes.find(o => o.name === event.home_team)
-              const awaySpread = spread?.outcomes.find(o => o.name === event.away_team)
-              const over = total?.outcomes.find(o => o.name === 'Over')
+                const awayML = h2h?.outcomes.find(o => o.name === event.away_team)
+                const homeML = h2h?.outcomes.find(o => o.name === event.home_team)
+                const awaySpread = spread?.outcomes.find(o => o.name === event.away_team)
+                const over = total?.outcomes.find(o => o.name === 'Over')
 
-              return (
-                <tr key={bm.key} className="border-b border-white/5 hover:bg-white/5">
-                  <td className="py-3 px-3 text-white font-medium">{bm.title}</td>
-                  <td className="py-3 px-3 text-center font-mono">
-                    {awayML && (
-                      <span className={awayML.price > 0 ? 'text-green-400' : 'text-white'}>
-                        {formatOdds(awayML.price)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono">
-                    {homeML && (
-                      <span className={homeML.price > 0 ? 'text-green-400' : 'text-white'}>
-                        {formatOdds(homeML.price)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-white">
-                    {awaySpread && `${awaySpread.point! > 0 ? '+' : ''}${awaySpread.point}`}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-white">
-                    {over && over.point}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                const awayPct = awayML ? oddsToPercentage(awayML.price) : 0
+                const homePct = homeML ? oddsToPercentage(homeML.price) : 0
+
+                return (
+                  <tr key={bm.key} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-3 px-3 text-white font-medium">{bm.title}</td>
+                    <td className="py-3 px-3 text-center">
+                      {awayML && (
+                        <div>
+                          <span className={`font-bold ${getProbabilityColor(awayPct)}`}>{awayPct}%</span>
+                          <span className="text-gray-500 text-xs ml-1">({formatOdds(awayML.price)})</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      {homeML && (
+                        <div>
+                          <span className={`font-bold ${getProbabilityColor(homePct)}`}>{homePct}%</span>
+                          <span className="text-gray-500 text-xs ml-1">({formatOdds(homeML.price)})</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono text-white">
+                      {awaySpread && `${awaySpread.point! > 0 ? '+' : ''}${awaySpread.point}`}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono text-white">
+                      {over && over.point}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
@@ -181,11 +241,40 @@ export default async function OddsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Betting Odds</h1>
-          <p className="text-gray-400">
-            Live odds from top sportsbooks including DraftKings, FanDuel, BetMGM, and more
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Betting Odds</h1>
+          <p className="text-gray-400 text-sm sm:text-base">
+            Live odds with win probabilities from top sportsbooks
           </p>
         </div>
+
+        {/* Legend */}
+        {hasOdds && (
+          <div className="glass-card rounded-xl p-4 mb-6">
+            <p className="text-sm text-gray-400 mb-3">Win Probability Key:</p>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span className="text-xs text-gray-300">70%+ (Strong Favorite)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                <span className="text-xs text-gray-300">55-69% (Favorite)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <span className="text-xs text-gray-300">45-54% (Toss-up)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                <span className="text-xs text-gray-300">30-44% (Underdog)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <span className="text-xs text-gray-300">&lt;30% (Long Shot)</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {!hasOdds ? (
           <div className="glass-card rounded-xl p-8 text-center">
@@ -226,11 +315,11 @@ export default async function OddsPage() {
                     <span className="text-orange-400 font-bold text-sm">NBA</span>
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">NBA Odds</h2>
-                    <p className="text-sm text-gray-400">{nbaOdds.length} games available</p>
+                    <h2 className="text-lg sm:text-xl font-bold text-white">NBA Odds</h2>
+                    <p className="text-xs sm:text-sm text-gray-400">{nbaOdds.length} games available</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {nbaOdds.map((event) => (
                     <OddsCard key={event.id} event={event} />
                   ))}
@@ -246,11 +335,11 @@ export default async function OddsPage() {
                     <span className="text-green-400 font-bold text-sm">NFL</span>
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">NFL Odds</h2>
-                    <p className="text-sm text-gray-400">{nflOdds.length} games available</p>
+                    <h2 className="text-lg sm:text-xl font-bold text-white">NFL Odds</h2>
+                    <p className="text-xs sm:text-sm text-gray-400">{nflOdds.length} games available</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {nflOdds.map((event) => (
                     <OddsCard key={event.id} event={event} />
                   ))}
@@ -261,7 +350,7 @@ export default async function OddsPage() {
         )}
 
         {/* Footer info */}
-        <div className="mt-10 text-center text-sm text-gray-500">
+        <div className="mt-10 text-center text-xs sm:text-sm text-gray-500">
           <p>Odds provided by The Odds API. Lines update every 5 minutes.</p>
           <p className="mt-1">Always gamble responsibly. Must be 21+ in most states.</p>
         </div>

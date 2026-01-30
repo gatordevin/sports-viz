@@ -10,8 +10,6 @@ import {
   TeamBettingStats
 } from '@/lib/espn'
 import {
-  calculateATSRecord,
-  calculateOURecord,
   calculateRestInfo,
   detectLineMovement,
   ATSRecord,
@@ -20,11 +18,10 @@ import {
   LineMovement
 } from '@/lib/bettingStats'
 import {
-  calculateRealATSRecord,
-  calculateRealOURecord,
   RealATSRecord,
   RealOURecord
 } from '@/lib/realBettingStats'
+import { fetchCoversATSData, coversToRealATSRecord, coversToRealOURecord } from '@/lib/coversScraper'
 import {
   predictGame,
   findValueBets,
@@ -99,41 +96,35 @@ async function getEnrichedTeamData(
     // Returns null if no recent games available
     const restInfo = calculateRestInfo(recentGames, gameDate)
 
-    // For NBA: Use REAL betting stats from BallDontLie API (which has actual historical spreads)
-    // For NFL: Fall back to simulated stats (BallDontLie doesn't have NFL betting data)
+    // For NBA: Use REAL betting stats from Covers.com (scraped actual ATS records)
+    // For NFL: Currently unavailable (Covers scraper only supports NBA)
     let atsRecord: ATSRecord | RealATSRecord | null | undefined = undefined
     let ouRecord: OURecord | RealOURecord | null | undefined = undefined
     let isRealBettingData = false
 
     if (sport === 'nba') {
-      // Fetch real ATS/O/U records from BallDontLie (uses actual historical spreads)
-      const [realATS, realOU] = await Promise.all([
-        calculateRealATSRecord(teamId, 15),
-        calculateRealOURecord(teamId, 15)
-      ])
+      // Fetch real ATS/O/U records from Covers.com
+      try {
+        const coversData = await fetchCoversATSData(teamId)
+        if (coversData && coversData.isRealData) {
+          const realATS = coversToRealATSRecord(coversData)
+          const realOU = coversToRealOURecord(coversData)
 
-      // Only use real data if we actually got meaningful results
-      if (realATS.isRealData && realATS.wins + realATS.losses > 0) {
-        atsRecord = realATS
-        isRealBettingData = true
-      } else {
-        // Fall back to simulated if real data unavailable (may return null)
-        atsRecord = calculateATSRecord(recentGames) || undefined
-      }
+          if (realATS.wins + realATS.losses > 0) {
+            atsRecord = realATS
+            isRealBettingData = true
+          }
 
-      if (realOU.isRealData && realOU.overs + realOU.unders > 0) {
-        ouRecord = realOU
-        isRealBettingData = true
-      } else {
-        // Fall back to simulated if real data unavailable (may return null)
-        ouRecord = calculateOURecord(recentGames, sport) || undefined
+          if (realOU.overs + realOU.unders > 0) {
+            ouRecord = realOU
+          }
+        }
+      } catch (error) {
+        console.error(`[Odds] Error fetching Covers data for ${teamName}:`, error)
       }
-    } else {
-      // NFL: Use simulated stats (no real betting data available)
-      // These may return null if no recent games
-      atsRecord = calculateATSRecord(recentGames) || undefined
-      ouRecord = calculateOURecord(recentGames, sport) || undefined
+      // NOTE: No fallback to simulated data - it produces inaccurate results
     }
+    // NFL: No ATS data available (Covers scraper only supports NBA for now)
 
     return {
       id: teamId,

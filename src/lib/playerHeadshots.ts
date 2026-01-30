@@ -99,10 +99,12 @@ export async function searchESPNPlayerId(firstName: string, lastName: string): P
     const data = await res.json()
 
     // Find NBA player in results
+    // ESPN API returns type: "player" (not "athlete") and league: "nba" (string, not object)
     const nbaPlayer = data?.items?.find((item: any) =>
-      item.type === 'athlete' &&
-      item.league?.slug === 'nba' &&
-      item.name?.toLowerCase().includes(lastName.toLowerCase())
+      item.type === 'player' &&
+      item.league === 'nba' &&
+      (item.name?.toLowerCase().includes(lastName.toLowerCase()) ||
+       item.displayName?.toLowerCase().includes(lastName.toLowerCase()))
     )
 
     if (nbaPlayer?.id) {

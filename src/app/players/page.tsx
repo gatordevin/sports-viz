@@ -145,25 +145,53 @@ function PlayersPageContent() {
       if (!res.ok) throw new Error('Failed to search players')
       data = await res.json()
 
-      // If no results and query has multiple words, try searching by last name (usually more unique)
+      // If no results and query has multiple words, try searching by first name first (often more unique)
       if (data.data.length === 0 && nameParts.length > 1) {
-        const lastName = nameParts[nameParts.length - 1]
-        const lastNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(lastName)}&per_page=25`, {
+        const firstName = nameParts[0]
+        const lastName = nameParts[nameParts.length - 1].toLowerCase()
+
+        // Try first name search first
+        const firstNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(firstName)}&per_page=25`, {
           headers: {
             'Authorization': 'REDACTED_BDL_KEY_OLD'
           }
         })
-        if (lastNameRes.ok) {
-          const lastNameData = await lastNameRes.json()
-          // Filter results to match the first name too for better accuracy
-          const firstName = nameParts[0].toLowerCase()
-          data.data = lastNameData.data.filter((p: BDLPlayer) =>
-            p.first_name.toLowerCase().includes(firstName) ||
-            firstName.includes(p.first_name.toLowerCase())
+
+        if (firstNameRes.ok) {
+          const firstNameData = await firstNameRes.json()
+          // Filter results to match the last name too
+          const filtered = firstNameData.data.filter((p: BDLPlayer) =>
+            p.last_name.toLowerCase().includes(lastName) ||
+            lastName.includes(p.last_name.toLowerCase())
           )
-          // If still no results, just use the last name search results
-          if (data.data.length === 0) {
-            data = lastNameData
+
+          if (filtered.length > 0) {
+            data.data = filtered
+          } else if (firstNameData.data.length > 0) {
+            // Show first name results if no exact match
+            data = firstNameData
+          }
+        }
+
+        // If still no results, try last name search
+        if (data.data.length === 0) {
+          const lastNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(nameParts[nameParts.length - 1])}&per_page=25`, {
+            headers: {
+              'Authorization': 'REDACTED_BDL_KEY_OLD'
+            }
+          })
+          if (lastNameRes.ok) {
+            const lastNameData = await lastNameRes.json()
+            const firstNameLower = firstName.toLowerCase()
+            const filtered = lastNameData.data.filter((p: BDLPlayer) =>
+              p.first_name.toLowerCase().includes(firstNameLower) ||
+              firstNameLower.includes(p.first_name.toLowerCase())
+            )
+            if (filtered.length > 0) {
+              data.data = filtered
+            } else {
+              data = lastNameData
+            }
           }
         }
       }

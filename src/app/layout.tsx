@@ -34,8 +34,8 @@ export default function RootLayout({
         },
       }}
     >
-      <html lang="en">
-        <body className={`${inter.className} bg-dark-900 text-white`}>
+      <html lang="en" suppressHydrationWarning>
+        <body className={`${inter.className} bg-dark-900 text-white`} suppressHydrationWarning>
           <Navigation />
           <main className="min-h-screen pt-16">
             {children}

@@ -1,19 +1,27 @@
-import { getNBAScoreboard, getNFLScoreboard } from '@/lib/espn'
+import { getNBAScoreboard, getNFLScoreboard, getNews } from '@/lib/espn'
 import GameCard from '@/components/GameCard'
 import StatsCard from '@/components/StatsCard'
+import { NewsList } from '@/components/NewsCard'
 import Link from 'next/link'
 
 export const revalidate = 60
 
 export default async function Dashboard() {
-  const [nbaGames, nflGames] = await Promise.all([
+  const [nbaGames, nflGames, nbaNews, nflNews] = await Promise.all([
     getNBAScoreboard(),
     getNFLScoreboard(),
+    getNews('nba', 3),
+    getNews('nfl', 3),
   ])
 
   const liveNBAGames = nbaGames.filter(g => g.status.type.state === 'in')
   const liveNFLGames = nflGames.filter(g => g.status.type.state === 'in')
   const totalLiveGames = liveNBAGames.length + liveNFLGames.length
+
+  // Combine news and sort by date
+  const combinedNews = [...nbaNews, ...nflNews]
+    .sort((a, b) => new Date(b.published).getTime() - new Date(a.published).getTime())
+    .slice(0, 5)
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -77,83 +85,130 @@ export default async function Dashboard() {
         />
       </div>
 
-      {/* NBA Section */}
-      <section className="mb-8 sm:mb-12">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-orange-400 font-bold text-xs sm:text-sm">NBA</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 sm:mb-12">
+        {/* Games Section */}
+        <div className="lg:col-span-2">
+          {/* NBA Section */}
+          <section className="mb-8">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-orange-400 font-bold text-xs sm:text-sm">NBA</span>
+                </div>
+                <h2 className="text-lg sm:text-2xl font-bold text-white truncate">Basketball</h2>
+                {liveNBAGames.length > 0 && (
+                  <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full flex-shrink-0">
+                    {liveNBAGames.length} Live
+                  </span>
+                )}
+              </div>
+              <Link
+                href="/nba"
+                className="text-xs sm:text-sm text-gray-400 hover:text-primary transition-colors flex items-center space-x-1 flex-shrink-0 min-h-[44px] px-2"
+              >
+                <span className="hidden sm:inline">View All</span>
+                <span className="sm:hidden">All</span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
             </div>
-            <h2 className="text-lg sm:text-2xl font-bold text-white truncate">Basketball</h2>
-            {liveNBAGames.length > 0 && (
-              <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full flex-shrink-0">
-                {liveNBAGames.length} Live
-              </span>
+
+            {nbaGames.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {nbaGames.slice(0, 4).map((game) => (
+                  <GameCard key={game.id} game={game} />
+                ))}
+              </div>
+            ) : (
+              <div className="glass rounded-xl p-6 sm:p-8 text-center">
+                <p className="text-gray-400 text-sm sm:text-base">No NBA games scheduled today</p>
+              </div>
             )}
-          </div>
-          <Link
-            href="/nba"
-            className="text-xs sm:text-sm text-gray-400 hover:text-primary transition-colors flex items-center space-x-1 flex-shrink-0 min-h-[44px] px-2"
-          >
-            <span className="hidden sm:inline">View All</span>
-            <span className="sm:hidden">All</span>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
+          </section>
+
+          {/* NFL Section */}
+          <section>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-green-400 font-bold text-xs sm:text-sm">NFL</span>
+                </div>
+                <h2 className="text-lg sm:text-2xl font-bold text-white truncate">Football</h2>
+                {liveNFLGames.length > 0 && (
+                  <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full flex-shrink-0">
+                    {liveNFLGames.length} Live
+                  </span>
+                )}
+              </div>
+              <Link
+                href="/nfl"
+                className="text-xs sm:text-sm text-gray-400 hover:text-primary transition-colors flex items-center space-x-1 flex-shrink-0 min-h-[44px] px-2"
+              >
+                <span className="hidden sm:inline">View All</span>
+                <span className="sm:hidden">All</span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+
+            {nflGames.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {nflGames.slice(0, 4).map((game) => (
+                  <GameCard key={game.id} game={game} />
+                ))}
+              </div>
+            ) : (
+              <div className="glass rounded-xl p-6 sm:p-8 text-center">
+                <p className="text-gray-400 text-sm sm:text-base">No NFL games scheduled today</p>
+              </div>
+            )}
+          </section>
         </div>
 
-        {nbaGames.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {nbaGames.slice(0, 6).map((game) => (
-              <GameCard key={game.id} game={game} />
-            ))}
-          </div>
-        ) : (
-          <div className="glass rounded-xl p-6 sm:p-8 text-center">
-            <p className="text-gray-400 text-sm sm:text-base">No NBA games scheduled today</p>
-          </div>
-        )}
-      </section>
+        {/* News Sidebar */}
+        <div className="lg:col-span-1">
+          {combinedNews.length > 0 && (
+            <NewsList articles={combinedNews} title="Latest Sports News" />
+          )}
 
-      {/* NFL Section */}
-      <section className="mb-8 sm:mb-12">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-green-400 font-bold text-xs sm:text-sm">NFL</span>
+          {/* Quick Links */}
+          <div className="mt-6 glass-card rounded-xl p-4 sm:p-5">
+            <h3 className="font-bold text-lg text-white mb-4">Quick Links</h3>
+            <div className="space-y-2">
+              <Link
+                href="/players"
+                className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="text-white">Search Players</span>
+                </div>
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <Link
+                href="/odds"
+                className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <span className="text-white">Betting Odds</span>
+                </div>
+                <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-primary to-secondary rounded text-white">
+                  PRO
+                </span>
+              </Link>
             </div>
-            <h2 className="text-lg sm:text-2xl font-bold text-white truncate">Football</h2>
-            {liveNFLGames.length > 0 && (
-              <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full flex-shrink-0">
-                {liveNFLGames.length} Live
-              </span>
-            )}
           </div>
-          <Link
-            href="/nfl"
-            className="text-xs sm:text-sm text-gray-400 hover:text-primary transition-colors flex items-center space-x-1 flex-shrink-0 min-h-[44px] px-2"
-          >
-            <span className="hidden sm:inline">View All</span>
-            <span className="sm:hidden">All</span>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
         </div>
-
-        {nflGames.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {nflGames.slice(0, 6).map((game) => (
-              <GameCard key={game.id} game={game} />
-            ))}
-          </div>
-        ) : (
-          <div className="glass rounded-xl p-6 sm:p-8 text-center">
-            <p className="text-gray-400 text-sm sm:text-base">No NFL games scheduled today</p>
-          </div>
-        )}
-      </section>
+      </div>
 
       {/* Premium CTA */}
       <section className="relative overflow-hidden rounded-xl sm:rounded-2xl p-6 sm:p-8 md:p-12 gradient-border">

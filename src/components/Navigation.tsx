@@ -10,6 +10,7 @@ const navItems = [
   { name: 'Dashboard', href: '/' },
   { name: 'NBA', href: '/nba' },
   { name: 'NFL', href: '/nfl' },
+  { name: 'Players', href: '/players' },
   { name: 'Odds', href: '/odds', premium: true, highlight: true },
 ]
 

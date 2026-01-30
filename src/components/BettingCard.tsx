@@ -318,79 +318,85 @@ function StatBar({ leftValue, rightValue, leftLabel, rightLabel }: {
   )
 }
 
-// ATS/O/U stats row
+// ATS/O/U stats row - Mobile responsive
 function BettingStatsRow({ teamData, isHome, sport }: { teamData: TeamData; isHome: boolean; sport: 'nba' | 'nfl' }) {
   const efficiency = calculateEfficiencyRatings(teamData.recentGames, sport)
 
+  // Get ATS and OU records - always show if teamData exists
+  const atsRecord = teamData.atsRecord
+  const ouRecord = teamData.ouRecord
+
   return (
-    <div className="space-y-2 text-xs">
-      {/* ATS Record */}
-      {teamData.atsRecord && (
-        <div className="flex items-center justify-between">
+    <div className="space-y-1.5 sm:space-y-2 text-[10px] sm:text-xs">
+      {/* ATS Record - Always show */}
+      {atsRecord && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-0">
           <span className="text-gray-400">ATS:</span>
-          <div className="flex items-center gap-2">
-            <span className={`font-mono ${getATSColor(teamData.atsRecord.percentage)}`}>
-              {teamData.atsRecord.wins}-{teamData.atsRecord.losses}
-              {teamData.atsRecord.pushes > 0 && `-${teamData.atsRecord.pushes}`}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className={`font-mono ${getATSColor(atsRecord.percentage)}`}>
+              {atsRecord.wins}-{atsRecord.losses}
+              {atsRecord.pushes > 0 && `-${atsRecord.pushes}`}
             </span>
-            <span className={`text-[10px] ${getATSColor(teamData.atsRecord.percentage)}`}>
-              ({teamData.atsRecord.percentage}%)
+            <span className={`text-[9px] sm:text-[10px] ${getATSColor(atsRecord.percentage)}`}>
+              ({atsRecord.percentage}%)
             </span>
           </div>
         </div>
       )}
 
       {/* Home/Away ATS Split */}
-      {teamData.atsRecord && (
-        <div className="flex items-center justify-between text-[10px]">
+      {atsRecord && (
+        <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
           <span className="text-gray-500">{isHome ? 'Home' : 'Away'} ATS:</span>
-          {isHome && teamData.atsRecord.homeATS ? (
+          {isHome && atsRecord.homeATS ? (
             <span className="text-gray-400 font-mono">
-              {teamData.atsRecord.homeATS.wins}-{teamData.atsRecord.homeATS.losses}
+              {atsRecord.homeATS.wins}-{atsRecord.homeATS.losses}
             </span>
-          ) : !isHome && teamData.atsRecord.awayATS ? (
+          ) : !isHome && atsRecord.awayATS ? (
             <span className="text-gray-400 font-mono">
-              {teamData.atsRecord.awayATS.wins}-{teamData.atsRecord.awayATS.losses}
+              {atsRecord.awayATS.wins}-{atsRecord.awayATS.losses}
             </span>
-          ) : null}
+          ) : (
+            <span className="text-gray-500 font-mono">--</span>
+          )}
         </div>
       )}
 
-      {/* O/U Record */}
-      {teamData.ouRecord && (
-        <div className="flex items-center justify-between">
+      {/* O/U Record - Always show */}
+      {ouRecord && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-0">
           <span className="text-gray-400">O/U:</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
             <span className="text-gray-300 font-mono">
-              {teamData.ouRecord.overs}O-{teamData.ouRecord.unders}U
+              {ouRecord.overs}O-{ouRecord.unders}U
             </span>
-            <span className="text-[10px] text-gray-500">
-              (Avg: {teamData.ouRecord.averageTotalPoints})
+            <span className="text-[9px] sm:text-[10px] text-gray-500">
+              (Avg: {ouRecord.averageTotalPoints})
             </span>
           </div>
         </div>
       )}
 
-      {/* Recent ATS */}
-      {teamData.atsRecord?.recentATS && teamData.atsRecord.recentATS.length > 0 && (
+      {/* Recent ATS - compact on mobile */}
+      {atsRecord?.recentATS && atsRecord.recentATS.length > 0 && (
         <div className="flex items-center justify-between">
-          <span className="text-gray-500 text-[10px]">Last 5 ATS:</span>
-          <ATSIndicator results={teamData.atsRecord.recentATS} />
+          <span className="text-gray-500 text-[9px] sm:text-[10px]">Last 5 ATS:</span>
+          <ATSIndicator results={atsRecord.recentATS} />
         </div>
       )}
 
       {/* Efficiency Ratings */}
-      <div className="flex items-center justify-between pt-1 border-t border-white/5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-0 pt-1 border-t border-white/5">
         <span className="text-gray-400">Off/Def:</span>
         <div className="flex items-center gap-1">
-          <span className={`font-mono text-[10px] ${getRatingColor(efficiency.offRating)}`}>
+          <span className={`font-mono text-[9px] sm:text-[10px] ${getRatingColor(efficiency.offRating)}`}>
             {efficiency.offRating}
           </span>
           <span className="text-gray-600">/</span>
-          <span className={`font-mono text-[10px] ${getRatingColor(efficiency.defRating, true)}`}>
+          <span className={`font-mono text-[9px] sm:text-[10px] ${getRatingColor(efficiency.defRating, true)}`}>
             {efficiency.defRating}
           </span>
-          <span className={`text-[10px] ml-1 ${efficiency.netRating > 0 ? 'text-green-400' : efficiency.netRating < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+          <span className={`text-[9px] sm:text-[10px] ml-1 ${efficiency.netRating > 0 ? 'text-green-400' : efficiency.netRating < 0 ? 'text-red-400' : 'text-gray-400'}`}>
             ({efficiency.netRating > 0 ? '+' : ''}{efficiency.netRating})
           </span>
         </div>
@@ -482,13 +488,13 @@ export default function BettingCard({
       </div>
 
       {/* Main Matchup */}
-      <div className="p-4">
-        <div className="flex items-stretch gap-4">
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-stretch gap-3 sm:gap-4">
           {/* Away Team Column */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
               {awayTeamData?.logo && (
-                <Link href={`/${sport}/team/${awayTeamData.id}`} className="w-12 h-12 relative flex-shrink-0 hover:scale-110 transition-transform">
+                <Link href={`/${sport}/team/${awayTeamData.id}`} className="w-10 h-10 sm:w-12 sm:h-12 relative flex-shrink-0 hover:scale-110 transition-transform">
                   <Image
                     src={awayTeamData.logo}
                     alt={event.away_team}
@@ -497,38 +503,38 @@ export default function BettingCard({
                   />
                 </Link>
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <Link
                   href={awayTeamData ? `/${sport}/team/${awayTeamData.id}` : '#'}
-                  className="font-bold text-white truncate block hover:text-primary transition-colors"
+                  className="font-bold text-white truncate block hover:text-primary transition-colors text-sm sm:text-base"
                 >
                   {event.away_team}
                 </Link>
-                <p className="text-xs text-gray-500">
+                <p className="text-[10px] sm:text-xs text-gray-500">
                   {awayTeamData?.record || '-'}
-                  {awayTeamData?.awayRecord && ` (${awayTeamData.awayRecord} Away)`}
+                  <span className="hidden sm:inline">{awayTeamData?.awayRecord && ` (${awayTeamData.awayRecord} Away)`}</span>
                 </p>
               </div>
             </div>
 
             {/* Away Win % */}
-            <div className="mb-3">
-              <div className={`text-2xl font-bold ${getProbabilityColor(awayPercentage)}`}>
+            <div className="mb-2 sm:mb-3">
+              <div className={`text-xl sm:text-2xl font-bold ${getProbabilityColor(awayPercentage)}`}>
                 {awayPercentage}%
               </div>
               {awayH2h && (
-                <div className="text-sm text-gray-500">{formatOdds(awayH2h.price)}</div>
+                <div className="text-xs sm:text-sm text-gray-500">{formatOdds(awayH2h.price)}</div>
               )}
             </div>
 
             {/* Away Spread with Line Movement */}
             {awaySpread && (
-              <div className="px-3 py-2 bg-white/5 rounded-lg mb-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-gray-400">Spread</div>
+              <div className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white/5 rounded-lg mb-2 sm:mb-3">
+                <div className="flex items-center justify-between gap-1">
+                  <div className="text-[10px] sm:text-xs text-gray-400">Spread</div>
                   {awayLineMovement && <LineMovementBadge movement={awayLineMovement} />}
                 </div>
-                <div className="text-lg font-mono text-white">
+                <div className="text-base sm:text-lg font-mono text-white">
                   {awaySpread.point! > 0 ? '+' : ''}{awaySpread.point}
                 </div>
               </div>
@@ -536,9 +542,11 @@ export default function BettingCard({
 
             {/* Away Form & Badges */}
             {awayForm && (
-              <div className="mb-3">
-                <div className="text-xs text-gray-400 mb-1 flex items-center gap-2 flex-wrap">
-                  Last 5: {awayForm.record}
+              <div className="mb-2 sm:mb-3">
+                <div className="text-[10px] sm:text-xs text-gray-400 mb-1 flex items-center gap-1 sm:gap-2 flex-wrap">
+                  <span className="hidden sm:inline">Last 5:</span>
+                  <span className="sm:hidden">L5:</span>
+                  {awayForm.record}
                   <StreakBadge results={awayForm.results} />
                   <ValueBetBadge percentage={awayPercentage} formWins={awayForm.results.filter(r => r === 'W').length} />
                   {awayTeamData?.restInfo && (
@@ -549,48 +557,57 @@ export default function BettingCard({
               </div>
             )}
 
-            {/* Away Betting Stats */}
-            {awayTeamData && (awayTeamData.atsRecord || awayTeamData.ouRecord) && (
-              <div className="mb-3 p-2 bg-white/[0.02] rounded-lg">
+            {/* Away Betting Stats - Always show if team data exists */}
+            {awayTeamData && (
+              <div className="mb-3 p-1.5 sm:p-2 bg-white/[0.02] rounded-lg">
                 <BettingStatsRow teamData={awayTeamData} isHome={false} sport={sport} />
               </div>
             )}
 
-            {/* Away Injuries */}
-            {awayTeamData && (
-              <div>
+            {/* Away Injuries - Collapsible on mobile */}
+            {awayTeamData && awayTeamData.injuries.length > 0 && (
+              <div className="hidden sm:block">
                 <div className="text-xs text-gray-400 mb-1 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  Injuries
+                  Injuries ({awayTeamData.injuries.length})
                 </div>
                 <InjuryList injuries={awayTeamData.injuries} />
               </div>
             )}
+            {/* Mobile injury count badge */}
+            {awayTeamData && awayTeamData.injuries.length > 0 && (
+              <div className="sm:hidden flex items-center gap-1 text-[10px] text-yellow-500">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                {awayTeamData.injuries.length} injuries
+              </div>
+            )}
           </div>
 
-          {/* Center - VS and Total */}
-          <div className="flex flex-col items-center justify-center w-20 flex-shrink-0">
+          {/* Center - VS and Total - Hidden on mobile, shown on sm+ */}
+          <div className="hidden sm:flex flex-col items-center justify-center w-16 sm:w-20 flex-shrink-0">
             <div className="text-gray-500 font-bold mb-2">@</div>
 
             {/* Total */}
             {over && under && (
-              <div className="text-center px-2 py-2 bg-white/5 rounded-lg">
-                <div className="text-[10px] text-gray-400 mb-1">O/U</div>
-                <div className="text-lg font-mono text-white font-bold">{over.point}</div>
+              <div className="text-center px-2 py-1.5 sm:py-2 bg-white/5 rounded-lg">
+                <div className="text-[9px] sm:text-[10px] text-gray-400 mb-0.5 sm:mb-1">O/U</div>
+                <div className="text-base sm:text-lg font-mono text-white font-bold">{over.point}</div>
               </div>
             )}
 
             {/* H2H if available */}
             {h2h && (h2h.team1Wins > 0 || h2h.team2Wins > 0) && (
-              <div className="mt-3 text-center">
-                <div className="text-[10px] text-gray-400">H2H</div>
-                <div className="text-xs text-white font-mono">
+              <div className="mt-2 sm:mt-3 text-center">
+                <div className="text-[9px] sm:text-[10px] text-gray-400">H2H</div>
+                <div className="text-[10px] sm:text-xs text-white font-mono">
                   {h2h.team2Wins}-{h2h.team1Wins}
                 </div>
                 {h2h.avgMargin !== 0 && (
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-[9px] sm:text-[10px] text-gray-500">
                     Avg: {h2h.avgMargin > 0 ? '+' : ''}{h2h.avgMargin.toFixed(1)}
                   </div>
                 )}
@@ -598,23 +615,23 @@ export default function BettingCard({
             )}
           </div>
 
-          {/* Home Team Column */}
-          <div className="flex-1 min-w-0 text-right">
-            <div className="flex items-center justify-end gap-3 mb-3">
-              <div className="min-w-0">
-                <Link
-                  href={homeTeamData ? `/${sport}/team/${homeTeamData.id}` : '#'}
-                  className="font-bold text-white truncate block hover:text-primary transition-colors"
-                >
-                  {event.home_team}
-                </Link>
-                <p className="text-xs text-gray-500">
-                  {homeTeamData?.record || '-'}
-                  {homeTeamData?.homeRecord && ` (${homeTeamData.homeRecord} Home)`}
-                </p>
+          {/* Mobile-only @ divider */}
+          <div className="flex sm:hidden items-center justify-center py-2">
+            <div className="text-gray-500 font-bold">vs</div>
+            {over && under && (
+              <div className="ml-3 flex items-center gap-1 text-[10px]">
+                <span className="text-gray-400">O/U:</span>
+                <span className="font-mono text-white font-bold">{over.point}</span>
               </div>
+            )}
+          </div>
+
+          {/* Home Team Column */}
+          <div className="flex-1 min-w-0 sm:text-right">
+            <div className="flex items-center sm:justify-end gap-2 sm:gap-3 mb-2 sm:mb-3">
+              {/* Logo first on mobile, last on desktop */}
               {homeTeamData?.logo && (
-                <Link href={`/${sport}/team/${homeTeamData.id}`} className="w-12 h-12 relative flex-shrink-0 hover:scale-110 transition-transform">
+                <Link href={`/${sport}/team/${homeTeamData.id}`} className="w-10 h-10 sm:w-12 sm:h-12 relative flex-shrink-0 hover:scale-110 transition-transform sm:order-2">
                   <Image
                     src={homeTeamData.logo}
                     alt={event.home_team}
@@ -623,26 +640,38 @@ export default function BettingCard({
                   />
                 </Link>
               )}
+              <div className="min-w-0 flex-1 sm:order-1">
+                <Link
+                  href={homeTeamData ? `/${sport}/team/${homeTeamData.id}` : '#'}
+                  className="font-bold text-white truncate block hover:text-primary transition-colors text-sm sm:text-base"
+                >
+                  {event.home_team}
+                </Link>
+                <p className="text-[10px] sm:text-xs text-gray-500">
+                  {homeTeamData?.record || '-'}
+                  <span className="hidden sm:inline">{homeTeamData?.homeRecord && ` (${homeTeamData.homeRecord} Home)`}</span>
+                </p>
+              </div>
             </div>
 
             {/* Home Win % */}
-            <div className="mb-3">
-              <div className={`text-2xl font-bold ${getProbabilityColor(homePercentage)}`}>
+            <div className="mb-2 sm:mb-3">
+              <div className={`text-xl sm:text-2xl font-bold ${getProbabilityColor(homePercentage)}`}>
                 {homePercentage}%
               </div>
               {homeH2h && (
-                <div className="text-sm text-gray-500">{formatOdds(homeH2h.price)}</div>
+                <div className="text-xs sm:text-sm text-gray-500">{formatOdds(homeH2h.price)}</div>
               )}
             </div>
 
             {/* Home Spread with Line Movement */}
             {homeSpread && (
-              <div className="px-3 py-2 bg-white/5 rounded-lg mb-3">
-                <div className="flex items-center justify-between">
+              <div className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white/5 rounded-lg mb-2 sm:mb-3">
+                <div className="flex items-center justify-between gap-1">
                   {homeLineMovement && <LineMovementBadge movement={homeLineMovement} />}
-                  <div className="text-xs text-gray-400">Spread</div>
+                  <div className="text-[10px] sm:text-xs text-gray-400">Spread</div>
                 </div>
-                <div className="text-lg font-mono text-white">
+                <div className="text-base sm:text-lg font-mono text-white">
                   {homeSpread.point! > 0 ? '+' : ''}{homeSpread.point}
                 </div>
               </div>
@@ -650,45 +679,56 @@ export default function BettingCard({
 
             {/* Home Form & Badges */}
             {homeForm && (
-              <div className="mb-3 flex flex-col items-end">
-                <div className="text-xs text-gray-400 mb-1 flex items-center gap-2 justify-end flex-wrap">
+              <div className="mb-2 sm:mb-3 flex flex-col sm:items-end">
+                <div className="text-[10px] sm:text-xs text-gray-400 mb-1 flex items-center gap-1 sm:gap-2 sm:justify-end flex-wrap">
                   {homeTeamData?.restInfo && (
                     <RestBadge restInfo={homeTeamData.restInfo} opponentRest={awayTeamData?.restInfo} />
                   )}
                   <ValueBetBadge percentage={homePercentage} formWins={homeForm.results.filter(r => r === 'W').length} />
                   <StreakBadge results={homeForm.results} />
-                  Last 5: {homeForm.record}
+                  <span className="hidden sm:inline">Last 5:</span>
+                  <span className="sm:hidden">L5:</span>
+                  {homeForm.record}
                 </div>
                 <FormIndicator results={homeForm.results} />
               </div>
             )}
 
-            {/* Home Betting Stats */}
-            {homeTeamData && (homeTeamData.atsRecord || homeTeamData.ouRecord) && (
-              <div className="mb-3 p-2 bg-white/[0.02] rounded-lg text-left">
+            {/* Home Betting Stats - Always show if team data exists */}
+            {homeTeamData && (
+              <div className="mb-3 p-1.5 sm:p-2 bg-white/[0.02] rounded-lg text-left">
                 <BettingStatsRow teamData={homeTeamData} isHome={true} sport={sport} />
               </div>
             )}
 
-            {/* Home Injuries */}
-            {homeTeamData && (
-              <div className="text-right">
-                <div className="text-xs text-gray-400 mb-1 flex items-center justify-end gap-1">
+            {/* Home Injuries - Collapsible on mobile */}
+            {homeTeamData && homeTeamData.injuries.length > 0 && (
+              <div className="hidden sm:block sm:text-right">
+                <div className="text-xs text-gray-400 mb-1 flex items-center sm:justify-end gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  Injuries
+                  Injuries ({homeTeamData.injuries.length})
                 </div>
                 <InjuryList injuries={homeTeamData.injuries} />
+              </div>
+            )}
+            {/* Mobile injury count badge */}
+            {homeTeamData && homeTeamData.injuries.length > 0 && (
+              <div className="sm:hidden flex items-center gap-1 text-[10px] text-yellow-500">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                {homeTeamData.injuries.length} injuries
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Stats Comparison Bar */}
+      {/* Stats Comparison Bar - Hide on mobile for cleaner view */}
       {awayTeamData && homeTeamData && (awayTeamData.ppg > 0 || homeTeamData.ppg > 0) && (
-        <div className="px-4 py-3 border-t border-white/10 space-y-3">
+        <div className="hidden sm:block px-3 sm:px-4 py-2 sm:py-3 border-t border-white/10 space-y-2 sm:space-y-3">
           <StatBar
             leftValue={awayTeamData.ppg}
             rightValue={homeTeamData.ppg}
@@ -702,7 +742,7 @@ export default function BettingCard({
             rightLabel="Opp PPG"
           />
           {/* Point Differential */}
-          <div className="flex justify-between items-center text-xs pt-1">
+          <div className="flex justify-between items-center text-[10px] sm:text-xs pt-1">
             <div className="flex items-center gap-1">
               <span className="text-gray-500">Diff:</span>
               <span className={`font-mono font-bold ${awayTeamData.pointDiff > 0 ? 'text-green-400' : awayTeamData.pointDiff < 0 ? 'text-red-400' : 'text-gray-400'}`}>
@@ -719,10 +759,23 @@ export default function BettingCard({
         </div>
       )}
 
+      {/* Mobile-only compact stats footer */}
+      {awayTeamData && homeTeamData && (awayTeamData.ppg > 0 || homeTeamData.ppg > 0) && (
+        <div className="sm:hidden px-3 py-2 border-t border-white/10 flex items-center justify-between text-[10px]">
+          <div className="text-gray-400">
+            PPG: <span className="text-white font-mono">{awayTeamData.ppg.toFixed(1)}</span>
+          </div>
+          <div className="text-gray-500">|</div>
+          <div className="text-gray-400">
+            <span className="text-white font-mono">{homeTeamData.ppg.toFixed(1)}</span> :PPG
+          </div>
+        </div>
+      )}
+
       {/* Quick Betting Summary */}
-      <div className="px-4 py-3 bg-white/5 border-t border-white/10">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-4">
+      <div className="px-3 sm:px-4 py-2 sm:py-3 bg-white/5 border-t border-white/10">
+        <div className="flex items-center justify-between text-[10px] sm:text-xs">
+          <div className="flex items-center gap-2 sm:gap-4">
             {awaySpread && (
               <span className="text-gray-400">
                 <span className="text-white font-medium">{event.away_team.split(' ').pop()}</span>
@@ -730,12 +783,12 @@ export default function BettingCard({
               </span>
             )}
             {over && (
-              <span className="text-gray-400">
+              <span className="text-gray-400 hidden sm:inline">
                 O/U <span className="text-white font-medium">{over.point}</span>
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <span className={`font-bold ${getProbabilityColor(awayPercentage)}`}>
               {awayPercentage}%
             </span>

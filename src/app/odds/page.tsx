@@ -32,6 +32,7 @@ import {
 } from '@/lib/predictor'
 import BettingCard from '@/components/BettingCard'
 import { PredictionsSummary } from '@/components/PredictionBadge'
+import BettingGuide, { InlineBettingGuide } from '@/components/BettingGuide'
 import Image from 'next/image'
 
 export const revalidate = 300 // Revalidate every 5 minutes
@@ -591,6 +592,9 @@ export default async function BettingDashboard() {
               />
             </div>
 
+            {/* Inline Betting Guide */}
+            <InlineBettingGuide />
+
             {/* Legends */}
             <div className="mb-6 space-y-3">
               <ProbabilityLegend />
@@ -753,6 +757,9 @@ export default async function BettingDashboard() {
           <p className="mt-1">Always gamble responsibly. Must be 21+ in most states.</p>
         </div>
       </div>
+
+      {/* Floating Betting Guide */}
+      <BettingGuide />
     </div>
   )
 }

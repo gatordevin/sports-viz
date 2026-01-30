@@ -107,32 +107,37 @@ interface PaginatedResponse<T> {
 }
 
 // Helper function to make authenticated requests
-async function fetchBDL<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+async function fetchBDL<T>(endpoint: string, params: Record<string, string> = {}): Promise<T | null> {
   const url = new URL(`${BALLDONTLIE_BASE}${endpoint}`)
   Object.entries(params).forEach(([key, value]) => {
     url.searchParams.append(key, value)
   })
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      'Authorization': BALLDONTLIE_API_KEY,
-    },
-    next: { revalidate: 300 } // Cache for 5 minutes
-  })
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        'Authorization': BALLDONTLIE_API_KEY,
+      },
+      next: { revalidate: 300 } // Cache for 5 minutes
+    })
 
-  if (!res.ok) {
-    console.error(`BallDontLie API error: ${res.status}`)
-    throw new Error(`BallDontLie API error: ${res.status}`)
+    if (!res.ok) {
+      console.error(`BallDontLie API error: ${res.status} for ${endpoint}`)
+      return null
+    }
+
+    return res.json()
+  } catch (error) {
+    console.error(`BallDontLie fetch error for ${endpoint}:`, error)
+    return null
   }
-
-  return res.json()
 }
 
 // Get all NBA teams
 export async function getBDLTeams(): Promise<BDLTeam[]> {
   try {
     const response = await fetchBDL<PaginatedResponse<BDLTeam>>('/teams')
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error fetching BDL teams:', error)
     return []
@@ -146,7 +151,7 @@ export async function searchPlayers(query: string, perPage: number = 25): Promis
       search: query,
       per_page: perPage.toString()
     })
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error searching players:', error)
     return []
@@ -157,7 +162,7 @@ export async function searchPlayers(query: string, perPage: number = 25): Promis
 export async function getPlayer(playerId: number): Promise<BDLPlayer | null> {
   try {
     const response = await fetchBDL<{ data: BDLPlayer }>(`/players/${playerId}`)
-    return response.data
+    return response?.data ?? null
   } catch (error) {
     console.error('Error fetching player:', error)
     return null
@@ -171,7 +176,7 @@ export async function getPlayers(page: number = 1, perPage: number = 25): Promis
       per_page: perPage.toString(),
       cursor: page.toString()
     })
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error fetching players:', error)
     return []
@@ -184,7 +189,7 @@ export async function getGamesByDate(date: string): Promise<BDLGame[]> {
     const response = await fetchBDL<PaginatedResponse<BDLGame>>('/games', {
       'dates[]': date
     })
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error fetching games by date:', error)
     return []
@@ -212,7 +217,7 @@ export async function getGames(
     }
 
     const response = await fetchBDL<PaginatedResponse<BDLGame>>('/games', params)
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error fetching games:', error)
     return []
@@ -248,7 +253,7 @@ export async function getPlayerStats(
     }
 
     const response = await fetchBDL<PaginatedResponse<BDLPlayerStats>>('/stats', params)
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error fetching player stats:', error)
     return []
@@ -270,7 +275,7 @@ export async function getSeasonAverages(
     })
 
     const response = await fetchBDL<PaginatedResponse<BDLSeasonAverage>>('/season_averages', params)
-    return response.data
+    return response?.data ?? []
   } catch (error) {
     console.error('Error fetching season averages:', error)
     return []

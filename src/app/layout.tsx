@@ -10,6 +10,11 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'StatFlow | Professional Sports Analytics',
   description: 'Real-time sports data, analytics, and visualizations for fantasy leagues and sports betting',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+  },
 }
 
 export default function RootLayout({

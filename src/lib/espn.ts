@@ -521,7 +521,13 @@ export async function getTeamBettingStats(sport: 'nba' | 'nfl', teamId: string):
       last10: '-', // ESPN doesn't directly provide this in team endpoint
       pointsPerGame: getStatValue('avgPointsFor') || getStatValue('pointsFor') / Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1),
       pointsAllowedPerGame: getStatValue('avgPointsAgainst') || getStatValue('pointsAgainst') / Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1),
-      pointDifferential: getStatValue('pointDifferential') || (getStatValue('pointsFor') - getStatValue('pointsAgainst')),
+      pointDifferential: (() => {
+        // Try to get per-game differential first, otherwise calculate from total
+        const gamesPlayed = Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1)
+        const totalDiff = getStatValue('pointDifferential') || (getStatValue('pointsFor') - getStatValue('pointsAgainst'))
+        // If total diff seems like season total (abs > 50), convert to per game
+        return Math.abs(totalDiff) > 50 ? totalDiff / gamesPlayed : totalDiff
+      })(),
       rank: team.rank || 0,
       conferenceRank: team.conferenceRank || 0
     }

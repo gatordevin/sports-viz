@@ -1,36 +1,33 @@
-// The Odds API Integration
-// API Documentation: https://the-odds-api.com/liveapi/guides/v4/
+// Unified Odds API Integration
+// Primary: BALLDONTLIE API (GOAT subscription - NBA)
+// Fallback: The Odds API (for NFL and when BALLDONTLIE unavailable)
+//
+// This module provides a unified interface for fetching betting odds from multiple sources
 
+import {
+  getBDLNBAOdds,
+  getBDLNFLOdds,
+  isBDLOddsAvailable,
+  type OddsEvent as BDLOddsEvent,
+  type Bookmaker as BDLBookmaker,
+  type Market as BDLMarket,
+  type Outcome as BDLOutcome
+} from './balldontlieOdds'
+
+// Re-export types from balldontlieOdds for compatibility
+export type { BDLOddsEvent as OddsEvent, BDLBookmaker as Bookmaker, BDLMarket as Market, BDLOutcome as Outcome }
+
+// The Odds API configuration (fallback)
 const ODDS_API_KEY = process.env.ODDS_API_KEY || ''
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4'
 
-export interface Bookmaker {
-  key: string
-  title: string
-  last_update: string
-  markets: Market[]
-}
+// Track which source was used for debugging
+export type OddsSource = 'balldontlie' | 'the-odds-api' | 'none'
 
-export interface Market {
-  key: string
-  last_update: string
-  outcomes: Outcome[]
-}
+let lastOddsSource: OddsSource = 'none'
 
-export interface Outcome {
-  name: string
-  price: number
-  point?: number
-}
-
-export interface OddsEvent {
-  id: string
-  sport_key: string
-  sport_title: string
-  commence_time: string
-  home_team: string
-  away_team: string
-  bookmakers: Bookmaker[]
+export function getLastOddsSource(): OddsSource {
+  return lastOddsSource
 }
 
 export interface Sport {
@@ -42,7 +39,11 @@ export interface Sport {
   has_outrights: boolean
 }
 
-// Get list of available sports
+// ============================================================================
+// THE ODDS API (FALLBACK)
+// ============================================================================
+
+// Get list of available sports from The Odds API
 export async function getSports(): Promise<Sport[]> {
   if (!ODDS_API_KEY) {
     console.warn('ODDS_API_KEY not set')
@@ -61,12 +62,12 @@ export async function getSports(): Promise<Sport[]> {
   return res.json()
 }
 
-// Get odds for a specific sport
-export async function getOdds(
+// Get odds from The Odds API (used as fallback)
+async function getOddsFromTheOddsAPI(
   sportKey: string,
   markets: string[] = ['h2h', 'spreads', 'totals'],
   regions: string[] = ['us']
-): Promise<OddsEvent[]> {
+): Promise<BDLOddsEvent[]> {
   if (!ODDS_API_KEY) {
     console.warn('ODDS_API_KEY not set')
     return []
@@ -79,47 +80,147 @@ export async function getOdds(
     oddsFormat: 'american'
   })
 
-  const res = await fetch(`${ODDS_API_BASE}/sports/${sportKey}/odds?${params}`, {
-    next: { revalidate: 300 } // Revalidate every 5 minutes
-  })
+  try {
+    const res = await fetch(`${ODDS_API_BASE}/sports/${sportKey}/odds?${params}`, {
+      next: { revalidate: 300 } // Revalidate every 5 minutes
+    })
 
-  if (!res.ok) {
-    console.error('Failed to fetch odds:', res.status)
+    if (!res.ok) {
+      console.error('[The Odds API] Failed to fetch odds:', res.status)
+      return []
+    }
+
+    return res.json()
+  } catch (error) {
+    console.error('[The Odds API] Fetch error:', error)
     return []
   }
-
-  return res.json()
 }
 
-// Get NBA odds
-export async function getNBAOdds(): Promise<OddsEvent[]> {
-  return getOdds('basketball_nba')
+// ============================================================================
+// UNIFIED ODDS FETCHING (BALLDONTLIE PRIMARY, THE ODDS API FALLBACK)
+// ============================================================================
+
+/**
+ * Get NBA odds - Primary: BALLDONTLIE, Fallback: The Odds API
+ */
+export async function getNBAOdds(): Promise<BDLOddsEvent[]> {
+  // Try BALLDONTLIE first (GOAT subscription includes NBA)
+  if (isBDLOddsAvailable()) {
+    console.log('[Odds] Fetching NBA odds from BALLDONTLIE...')
+    try {
+      const bdlOdds = await getBDLNBAOdds()
+      if (bdlOdds.length > 0) {
+        console.log(`[Odds] Got ${bdlOdds.length} NBA games from BALLDONTLIE`)
+        lastOddsSource = 'balldontlie'
+        return bdlOdds
+      }
+      console.log('[Odds] BALLDONTLIE returned no NBA odds, trying fallback...')
+    } catch (error) {
+      console.error('[Odds] BALLDONTLIE NBA fetch failed:', error)
+    }
+  }
+
+  // Fallback to The Odds API
+  console.log('[Odds] Fetching NBA odds from The Odds API (fallback)...')
+  const theOddsApiResult = await getOddsFromTheOddsAPI('basketball_nba')
+  if (theOddsApiResult.length > 0) {
+    lastOddsSource = 'the-odds-api'
+    console.log(`[Odds] Got ${theOddsApiResult.length} NBA games from The Odds API`)
+  } else {
+    lastOddsSource = 'none'
+  }
+  return theOddsApiResult
 }
 
-// Get NFL odds
-export async function getNFLOdds(): Promise<OddsEvent[]> {
-  return getOdds('americanfootball_nfl')
+/**
+ * Get NFL odds - Try BALLDONTLIE first, fallback to The Odds API
+ * Note: BALLDONTLIE NFL requires separate subscription, but we try anyway
+ */
+export async function getNFLOdds(): Promise<BDLOddsEvent[]> {
+  // Try BALLDONTLIE first (may not have NFL in current subscription)
+  if (isBDLOddsAvailable()) {
+    console.log('[Odds] Trying BALLDONTLIE for NFL odds...')
+    try {
+      const bdlOdds = await getBDLNFLOdds()
+      if (bdlOdds.length > 0) {
+        console.log(`[Odds] Got ${bdlOdds.length} NFL games from BALLDONTLIE`)
+        lastOddsSource = 'balldontlie'
+        return bdlOdds
+      }
+    } catch (error) {
+      console.log('[Odds] BALLDONTLIE NFL not available, using fallback')
+    }
+  }
+
+  // Fallback to The Odds API for NFL
+  console.log('[Odds] Fetching NFL odds from The Odds API...')
+  const theOddsApiResult = await getOddsFromTheOddsAPI('americanfootball_nfl')
+  if (theOddsApiResult.length > 0) {
+    lastOddsSource = 'the-odds-api'
+    console.log(`[Odds] Got ${theOddsApiResult.length} NFL games from The Odds API`)
+  } else {
+    lastOddsSource = 'none'
+  }
+  return theOddsApiResult
 }
 
-// Get MLB odds
-export async function getMLBOdds(): Promise<OddsEvent[]> {
-  return getOdds('baseball_mlb')
+/**
+ * Get MLB odds - The Odds API only (BALLDONTLIE doesn't have MLB in GOAT tier)
+ */
+export async function getMLBOdds(): Promise<BDLOddsEvent[]> {
+  lastOddsSource = 'the-odds-api'
+  return getOddsFromTheOddsAPI('baseball_mlb')
 }
 
-// Get NHL odds
-export async function getNHLOdds(): Promise<OddsEvent[]> {
-  return getOdds('icehockey_nhl')
+/**
+ * Get NHL odds - The Odds API only
+ */
+export async function getNHLOdds(): Promise<BDLOddsEvent[]> {
+  lastOddsSource = 'the-odds-api'
+  return getOddsFromTheOddsAPI('icehockey_nhl')
 }
 
-// Get NCAAB odds
-export async function getNCAABOdds(): Promise<OddsEvent[]> {
-  return getOdds('basketball_ncaab')
+/**
+ * Get NCAAB odds - The Odds API only
+ */
+export async function getNCAABOdds(): Promise<BDLOddsEvent[]> {
+  lastOddsSource = 'the-odds-api'
+  return getOddsFromTheOddsAPI('basketball_ncaab')
 }
 
-// Get NCAAF odds
-export async function getNCAAFOdds(): Promise<OddsEvent[]> {
-  return getOdds('americanfootball_ncaaf')
+/**
+ * Get NCAAF odds - The Odds API only
+ */
+export async function getNCAAFOdds(): Promise<BDLOddsEvent[]> {
+  lastOddsSource = 'the-odds-api'
+  return getOddsFromTheOddsAPI('americanfootball_ncaaf')
 }
+
+/**
+ * Generic getOdds function for backwards compatibility
+ */
+export async function getOdds(
+  sportKey: string,
+  markets: string[] = ['h2h', 'spreads', 'totals'],
+  regions: string[] = ['us']
+): Promise<BDLOddsEvent[]> {
+  // Route to appropriate function based on sport
+  if (sportKey === 'basketball_nba') {
+    return getNBAOdds()
+  }
+  if (sportKey === 'americanfootball_nfl') {
+    return getNFLOdds()
+  }
+
+  // Other sports use The Odds API directly
+  lastOddsSource = 'the-odds-api'
+  return getOddsFromTheOddsAPI(sportKey, markets, regions)
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 // Helper function to format American odds
 export function formatOdds(price: number): string {
@@ -137,9 +238,9 @@ export function formatSpread(point: number | undefined, price: number): string {
 }
 
 // Helper function to get best odds from multiple bookmakers
-export function getBestOdds(event: OddsEvent, marketKey: string = 'h2h'): { home: Outcome | null; away: Outcome | null; bookmaker: string } {
-  let bestHome: Outcome | null = null
-  let bestAway: Outcome | null = null
+export function getBestOdds(event: BDLOddsEvent, marketKey: string = 'h2h'): { home: BDLOutcome | null; away: BDLOutcome | null; bookmaker: string } {
+  let bestHome: BDLOutcome | null = null
+  let bestAway: BDLOutcome | null = null
   let bestBookmaker = ''
 
   for (const bookmaker of event.bookmakers) {
@@ -163,7 +264,7 @@ export function getBestOdds(event: OddsEvent, marketKey: string = 'h2h'): { home
 }
 
 // Get odds from a specific bookmaker
-export function getBookmakerOdds(event: OddsEvent, bookmakerKey: string): Bookmaker | undefined {
+export function getBookmakerOdds(event: BDLOddsEvent, bookmakerKey: string): BDLBookmaker | undefined {
   return event.bookmakers.find(b => b.key === bookmakerKey)
 }
 
@@ -173,6 +274,7 @@ export const POPULAR_BOOKMAKERS = {
   fanduel: 'FanDuel',
   betmgm: 'BetMGM',
   caesars: 'Caesars',
+  betrivers: 'BetRivers',
   pointsbet: 'PointsBet',
   bovada: 'Bovada',
   betonlineag: 'BetOnline.ag'

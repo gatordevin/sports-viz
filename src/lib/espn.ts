@@ -356,3 +356,325 @@ export const NFL_TEAM_IDS = {
   eagles: '21', steelers: '23', fortyniners: '25', seahawks: '26', buccaneers: '27',
   titans: '10', commanders: '28'
 } as const
+
+// Injury interfaces
+export interface Injury {
+  playerId: string
+  playerName: string
+  position: string
+  status: 'Out' | 'Doubtful' | 'Questionable' | 'Probable' | 'Day-To-Day' | 'Unknown'
+  description?: string
+  isStarter?: boolean
+}
+
+export interface TeamInjuries {
+  teamId: string
+  teamName: string
+  injuries: Injury[]
+}
+
+// Fetch team injuries
+export async function getTeamInjuries(sport: 'nba' | 'nfl', teamId: string): Promise<Injury[]> {
+  const sportPath = sport === 'nba' ? 'basketball/nba' : 'football/nfl'
+  try {
+    const res = await fetch(`${ESPN_BASE_URL}/${sportPath}/teams/${teamId}/injuries`, {
+      next: { revalidate: 900 } // 15 minutes
+    })
+
+    if (!res.ok) return []
+
+    const data = await res.json()
+    if (!data.injuries) return []
+
+    return data.injuries.map((injury: any) => ({
+      playerId: injury.athlete?.id || '',
+      playerName: injury.athlete?.fullName || injury.athlete?.displayName || 'Unknown',
+      position: injury.athlete?.position?.abbreviation || '',
+      status: normalizeInjuryStatus(injury.status),
+      description: injury.details?.detail || injury.longComment || '',
+      isStarter: injury.athlete?.starter || false
+    }))
+  } catch (error) {
+    console.error(`Error fetching injuries for team ${teamId}:`, error)
+    return []
+  }
+}
+
+// Normalize injury status strings
+function normalizeInjuryStatus(status: string): Injury['status'] {
+  const s = status?.toLowerCase() || ''
+  if (s.includes('out')) return 'Out'
+  if (s.includes('doubtful')) return 'Doubtful'
+  if (s.includes('questionable')) return 'Questionable'
+  if (s.includes('probable')) return 'Probable'
+  if (s.includes('day-to-day') || s.includes('day to day')) return 'Day-To-Day'
+  return 'Unknown'
+}
+
+// Get team stats for betting context
+export interface TeamBettingStats {
+  teamId: string
+  teamName: string
+  abbreviation: string
+  logo: string
+  record: string
+  homeRecord: string
+  awayRecord: string
+  conferenceRecord: string
+  streak: string
+  last10: string
+  pointsPerGame: number
+  pointsAllowedPerGame: number
+  pointDifferential: number
+  rank: number
+  conferenceRank: number
+}
+
+// Parse record string like "25-15" into components
+function parseRecord(record: string): { wins: number; losses: number } {
+  const parts = record?.split('-') || ['0', '0']
+  return {
+    wins: parseInt(parts[0]) || 0,
+    losses: parseInt(parts[1]) || 0
+  }
+}
+
+// Fetch comprehensive team stats for betting
+export async function getTeamBettingStats(sport: 'nba' | 'nfl', teamId: string): Promise<TeamBettingStats | null> {
+  const sportPath = sport === 'nba' ? 'basketball/nba' : 'football/nfl'
+  try {
+    const res = await fetch(`${ESPN_BASE_URL}/${sportPath}/teams/${teamId}`, {
+      next: { revalidate: 1800 } // 30 minutes
+    })
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const team = data.team
+
+    if (!team) return null
+
+    // Extract stats from different record types
+    const records = team.record?.items || []
+    const overallRecord = records.find((r: any) => r.type === 'total') || records[0]
+    const homeRecord = records.find((r: any) => r.type === 'home')
+    const awayRecord = records.find((r: any) => r.type === 'road' || r.type === 'away')
+    const confRecord = records.find((r: any) => r.type === 'conference')
+
+    // Get stats from the stats array
+    const stats = overallRecord?.stats || []
+    const getStatValue = (name: string) => {
+      const stat = stats.find((s: any) => s.name === name || s.abbreviation === name)
+      return stat?.value || 0
+    }
+
+    return {
+      teamId: team.id,
+      teamName: team.displayName,
+      abbreviation: team.abbreviation,
+      logo: team.logos?.[0]?.href || '',
+      record: overallRecord?.summary || '0-0',
+      homeRecord: homeRecord?.summary || '-',
+      awayRecord: awayRecord?.summary || '-',
+      conferenceRecord: confRecord?.summary || '-',
+      streak: getStatValue('streak') || '-',
+      last10: '-', // ESPN doesn't directly provide this in team endpoint
+      pointsPerGame: getStatValue('avgPointsFor') || getStatValue('pointsFor') / Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1),
+      pointsAllowedPerGame: getStatValue('avgPointsAgainst') || getStatValue('pointsAgainst') / Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1),
+      pointDifferential: getStatValue('pointDifferential') || (getStatValue('pointsFor') - getStatValue('pointsAgainst')),
+      rank: team.rank || 0,
+      conferenceRank: team.conferenceRank || 0
+    }
+  } catch (error) {
+    console.error(`Error fetching betting stats for team ${teamId}:`, error)
+    return null
+  }
+}
+
+// Get recent games for form calculation
+export interface RecentGame {
+  date: string
+  opponent: string
+  opponentId: string
+  isHome: boolean
+  teamScore: number
+  opponentScore: number
+  result: 'W' | 'L'
+}
+
+export async function getTeamRecentGames(sport: 'nba' | 'nfl', teamId: string, limit: number = 10): Promise<RecentGame[]> {
+  const sportPath = sport === 'nba' ? 'basketball/nba' : 'football/nfl'
+  try {
+    const res = await fetch(`${ESPN_BASE_URL}/${sportPath}/teams/${teamId}/schedule`, {
+      next: { revalidate: 1800 }
+    })
+
+    if (!res.ok) return []
+
+    const data = await res.json()
+    const events = data.events || []
+
+    // Filter completed games and get most recent
+    const completedGames = events
+      .filter((event: any) => event.competitions?.[0]?.status?.type?.completed)
+      .slice(-limit)
+      .reverse()
+
+    return completedGames.map((event: any) => {
+      const competition = event.competitions[0]
+      const competitors = competition.competitors || []
+      // ESPN API returns team.id as a number, but teamId is a string - need to compare as strings
+      const team = competitors.find((c: any) => String(c.team?.id) === String(teamId))
+      const opponent = competitors.find((c: any) => String(c.team?.id) !== String(teamId))
+
+      // ESPN API returns score as an object with value/displayValue, or sometimes just a string
+      const teamScore = parseInt(team?.score?.displayValue || team?.score) || 0
+      const opponentScore = parseInt(opponent?.score?.displayValue || opponent?.score) || 0
+
+      return {
+        date: event.date,
+        opponent: opponent?.team?.displayName || 'Unknown',
+        opponentId: opponent?.team?.id || '',
+        isHome: team?.homeAway === 'home',
+        teamScore,
+        opponentScore,
+        result: teamScore > opponentScore ? 'W' : 'L'
+      }
+    })
+  } catch (error) {
+    console.error(`Error fetching recent games for team ${teamId}:`, error)
+    return []
+  }
+}
+
+// Calculate form from recent games (last N games)
+export function calculateForm(recentGames: RecentGame[], n: number = 5): { record: string; results: ('W' | 'L')[] } {
+  const games = recentGames.slice(0, n)
+  const wins = games.filter(g => g.result === 'W').length
+  const losses = games.filter(g => g.result === 'L').length
+  return {
+    record: `${wins}-${losses}`,
+    results: games.map(g => g.result)
+  }
+}
+
+// Get head-to-head record between two teams
+export async function getHeadToHead(sport: 'nba' | 'nfl', team1Id: string, team2Id: string, seasons: number = 3): Promise<{
+  team1Wins: number
+  team2Wins: number
+  avgMargin: number
+  recentGames: { date: string; team1Score: number; team2Score: number; winner: string }[]
+}> {
+  try {
+    // Get recent games for team1 and filter for matchups against team2
+    const recentGames = await getTeamRecentGames(sport, team1Id, 50)
+    const h2hGames = recentGames.filter(g => g.opponentId === team2Id)
+
+    const team1Wins = h2hGames.filter(g => g.result === 'W').length
+    const team2Wins = h2hGames.filter(g => g.result === 'L').length
+
+    const margins = h2hGames.map(g => g.teamScore - g.opponentScore)
+    const avgMargin = margins.length > 0
+      ? margins.reduce((a, b) => a + b, 0) / margins.length
+      : 0
+
+    return {
+      team1Wins,
+      team2Wins,
+      avgMargin,
+      recentGames: h2hGames.slice(0, 5).map(g => ({
+        date: g.date,
+        team1Score: g.teamScore,
+        team2Score: g.opponentScore,
+        winner: g.result === 'W' ? 'team1' : 'team2'
+      }))
+    }
+  } catch (error) {
+    console.error('Error fetching head-to-head:', error)
+    return { team1Wins: 0, team2Wins: 0, avgMargin: 0, recentGames: [] }
+  }
+}
+
+// Team name to ID mapping helper
+export function findTeamIdByName(sport: 'nba' | 'nfl', teamName: string): string | null {
+  const normalizedName = teamName.toLowerCase().trim()
+
+  if (sport === 'nba') {
+    // Common NBA team name variations
+    const nbaMapping: Record<string, string> = {
+      'atlanta hawks': '1', 'hawks': '1',
+      'boston celtics': '2', 'celtics': '2',
+      'brooklyn nets': '3', 'nets': '3',
+      'charlotte hornets': '4', 'hornets': '4',
+      'chicago bulls': '5', 'bulls': '5',
+      'cleveland cavaliers': '6', 'cavaliers': '6', 'cavs': '6',
+      'dallas mavericks': '7', 'mavericks': '7', 'mavs': '7',
+      'denver nuggets': '8', 'nuggets': '8',
+      'detroit pistons': '9', 'pistons': '9',
+      'golden state warriors': '10', 'warriors': '10',
+      'houston rockets': '11', 'rockets': '11',
+      'indiana pacers': '12', 'pacers': '12',
+      'los angeles clippers': '13', 'la clippers': '13', 'clippers': '13',
+      'los angeles lakers': '14', 'la lakers': '14', 'lakers': '14',
+      'memphis grizzlies': '15', 'grizzlies': '15',
+      'miami heat': '16', 'heat': '16',
+      'milwaukee bucks': '17', 'bucks': '17',
+      'minnesota timberwolves': '18', 'timberwolves': '18', 'wolves': '18',
+      'new orleans pelicans': '19', 'pelicans': '19',
+      'new york knicks': '20', 'knicks': '20',
+      'oklahoma city thunder': '21', 'thunder': '21', 'okc thunder': '21',
+      'orlando magic': '22', 'magic': '22',
+      'philadelphia 76ers': '23', '76ers': '23', 'sixers': '23',
+      'phoenix suns': '24', 'suns': '24',
+      'portland trail blazers': '25', 'trail blazers': '25', 'blazers': '25',
+      'sacramento kings': '26', 'kings': '26',
+      'san antonio spurs': '27', 'spurs': '27',
+      'toronto raptors': '28', 'raptors': '28',
+      'utah jazz': '29', 'jazz': '29',
+      'washington wizards': '30', 'wizards': '30'
+    }
+
+    return nbaMapping[normalizedName] || null
+  }
+
+  if (sport === 'nfl') {
+    const nflMapping: Record<string, string> = {
+      'arizona cardinals': '22', 'cardinals': '22',
+      'atlanta falcons': '1', 'falcons': '1',
+      'baltimore ravens': '33', 'ravens': '33',
+      'buffalo bills': '2', 'bills': '2',
+      'carolina panthers': '29', 'panthers': '29',
+      'chicago bears': '3', 'bears': '3',
+      'cincinnati bengals': '4', 'bengals': '4',
+      'cleveland browns': '5', 'browns': '5',
+      'dallas cowboys': '6', 'cowboys': '6',
+      'denver broncos': '7', 'broncos': '7',
+      'detroit lions': '8', 'lions': '8',
+      'green bay packers': '9', 'packers': '9',
+      'houston texans': '34', 'texans': '34',
+      'indianapolis colts': '11', 'colts': '11',
+      'jacksonville jaguars': '30', 'jaguars': '30',
+      'kansas city chiefs': '12', 'chiefs': '12',
+      'las vegas raiders': '13', 'raiders': '13',
+      'los angeles chargers': '24', 'la chargers': '24', 'chargers': '24',
+      'los angeles rams': '14', 'la rams': '14', 'rams': '14',
+      'miami dolphins': '15', 'dolphins': '15',
+      'minnesota vikings': '16', 'vikings': '16',
+      'new england patriots': '17', 'patriots': '17',
+      'new orleans saints': '18', 'saints': '18',
+      'new york giants': '19', 'giants': '19', 'ny giants': '19',
+      'new york jets': '20', 'jets': '20', 'ny jets': '20',
+      'philadelphia eagles': '21', 'eagles': '21',
+      'pittsburgh steelers': '23', 'steelers': '23',
+      'san francisco 49ers': '25', '49ers': '25', 'niners': '25',
+      'seattle seahawks': '26', 'seahawks': '26',
+      'tampa bay buccaneers': '27', 'buccaneers': '27', 'bucs': '27',
+      'tennessee titans': '10', 'titans': '10',
+      'washington commanders': '28', 'commanders': '28'
+    }
+
+    return nflMapping[normalizedName] || null
+  }
+
+  return null
+}

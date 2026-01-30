@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -105,7 +105,7 @@ function PlayerSearchCard({ player, seasonAvg }: { player: BDLPlayer; seasonAvg?
   )
 }
 
-export default function PlayersPage() {
+function PlayersPageContent() {
   const searchParams = useSearchParams()
   const initialSearch = searchParams.get('search') || ''
 
@@ -303,5 +303,40 @@ export default function PlayersPage() {
         <p>Player data provided by BallDontLie API</p>
       </div>
     </div>
+  )
+}
+
+// Loading fallback for Suspense
+function PlayersPageLoading() {
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="mb-8 animate-pulse">
+        <div className="h-10 bg-white/10 rounded w-48 mb-4"></div>
+        <div className="h-4 bg-white/5 rounded w-64"></div>
+      </div>
+      <div className="h-12 bg-white/5 rounded-xl mb-8"></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="glass rounded-xl p-5 animate-pulse">
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-white/10 rounded-full"></div>
+              <div className="flex-1">
+                <div className="h-5 bg-white/10 rounded w-32 mb-2"></div>
+                <div className="h-4 bg-white/5 rounded w-24"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Default export wraps content in Suspense for useSearchParams
+export default function PlayersPage() {
+  return (
+    <Suspense fallback={<PlayersPageLoading />}>
+      <PlayersPageContent />
+    </Suspense>
   )
 }

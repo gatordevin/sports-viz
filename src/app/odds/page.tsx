@@ -9,6 +9,16 @@ import {
   RecentGame,
   TeamBettingStats
 } from '@/lib/espn'
+import {
+  calculateATSRecord,
+  calculateOURecord,
+  calculateRestInfo,
+  detectLineMovement,
+  ATSRecord,
+  OURecord,
+  RestInfo,
+  LineMovement
+} from '@/lib/bettingStats'
 import BettingCard from '@/components/BettingCard'
 import Image from 'next/image'
 
@@ -28,6 +38,10 @@ interface EnrichedTeamData {
   pointDiff: number
   recentGames: RecentGame[]
   injuries: Injury[]
+  // New betting stats
+  atsRecord?: ATSRecord
+  ouRecord?: OURecord
+  restInfo?: RestInfo
 }
 
 interface EnrichedEvent {
@@ -40,12 +54,15 @@ interface EnrichedEvent {
     avgMargin: number
   } | null
   sport: 'nba' | 'nfl'
+  homeLineMovement: LineMovement | null
+  awayLineMovement: LineMovement | null
 }
 
 // Fetch enriched data for a team
 async function getEnrichedTeamData(
   sport: 'nba' | 'nfl',
-  teamName: string
+  teamName: string,
+  gameDate: Date
 ): Promise<EnrichedTeamData | null> {
   const teamId = findTeamIdByName(sport, teamName)
   if (!teamId) return null
@@ -54,10 +71,15 @@ async function getEnrichedTeamData(
     const [stats, injuries, recentGames] = await Promise.all([
       getTeamBettingStats(sport, teamId),
       getTeamInjuries(sport, teamId),
-      getTeamRecentGames(sport, teamId, 10)
+      getTeamRecentGames(sport, teamId, 15) // Get more games for better ATS/OU calculation
     ])
 
     if (!stats) return null
+
+    // Calculate betting-specific stats
+    const atsRecord = calculateATSRecord(recentGames)
+    const ouRecord = calculateOURecord(recentGames, sport)
+    const restInfo = calculateRestInfo(recentGames, gameDate)
 
     return {
       id: teamId,
@@ -72,7 +94,10 @@ async function getEnrichedTeamData(
       oppg: stats.pointsAllowedPerGame,
       pointDiff: stats.pointDifferential,
       recentGames,
-      injuries
+      injuries,
+      atsRecord,
+      ouRecord,
+      restInfo
     }
   } catch (error) {
     console.error(`Error enriching team data for ${teamName}:`, error)
@@ -84,9 +109,11 @@ async function getEnrichedTeamData(
 async function enrichEvents(events: OddsEvent[], sport: 'nba' | 'nfl'): Promise<EnrichedEvent[]> {
   const enrichedEvents = await Promise.all(
     events.map(async (event) => {
+      const gameDate = new Date(event.commence_time)
+
       const [homeTeamData, awayTeamData] = await Promise.all([
-        getEnrichedTeamData(sport, event.home_team),
-        getEnrichedTeamData(sport, event.away_team)
+        getEnrichedTeamData(sport, event.home_team, gameDate),
+        getEnrichedTeamData(sport, event.away_team, gameDate)
       ])
 
       let h2h = null
@@ -94,12 +121,18 @@ async function enrichEvents(events: OddsEvent[], sport: 'nba' | 'nfl'): Promise<
         h2h = await getHeadToHead(sport, awayTeamData.id, homeTeamData.id)
       }
 
+      // Detect line movement
+      const homeLineMovement = detectLineMovement(event, 'home')
+      const awayLineMovement = detectLineMovement(event, 'away')
+
       return {
         event,
         homeTeamData,
         awayTeamData,
         h2h,
-        sport
+        sport,
+        homeLineMovement,
+        awayLineMovement
       }
     })
   )
@@ -206,36 +239,33 @@ function CompactOddsCard({ enrichedEvent }: { enrichedEvent: EnrichedEvent }) {
         </div>
       </div>
 
-      {/* Injury indicator */}
-      {((awayTeamData?.injuries.length || 0) > 0 || (homeTeamData?.injuries.length || 0) > 0) && (
-        <div className="mt-3 pt-2 border-t border-white/5 flex items-center gap-2 text-[10px] text-gray-500">
-          <svg className="w-3 h-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          {(awayTeamData?.injuries.length || 0) + (homeTeamData?.injuries.length || 0)} injuries reported
+      {/* Quick Stats Indicators */}
+      <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px]">
+        {/* Rest indicators */}
+        <div className="flex items-center gap-2">
+          {awayTeamData?.restInfo?.isBackToBack && (
+            <span className="text-red-400">Away B2B</span>
+          )}
+          {homeTeamData?.restInfo?.isBackToBack && (
+            <span className="text-red-400">Home B2B</span>
+          )}
+          {!awayTeamData?.restInfo?.isBackToBack && !homeTeamData?.restInfo?.isBackToBack && (
+            <span className="text-gray-500">
+              Rest: {awayTeamData?.restInfo?.daysOfRest || '?'}d vs {homeTeamData?.restInfo?.daysOfRest || '?'}d
+            </span>
+          )}
         </div>
-      )}
-    </div>
-  )
-}
 
-// Sport filter tabs component
-function SportTabs({ active, onChange }: { active: 'all' | 'nba' | 'nfl'; onChange: (sport: 'all' | 'nba' | 'nfl') => void }) {
-  return (
-    <div className="flex gap-2">
-      {(['all', 'nba', 'nfl'] as const).map((sport) => (
-        <button
-          key={sport}
-          onClick={() => onChange(sport)}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            active === sport
-              ? 'bg-white/10 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          {sport === 'all' ? 'All Sports' : sport.toUpperCase()}
-        </button>
-      ))}
+        {/* Injury indicator */}
+        {((awayTeamData?.injuries.length || 0) > 0 || (homeTeamData?.injuries.length || 0) > 0) && (
+          <div className="flex items-center gap-1 text-yellow-500">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {(awayTeamData?.injuries.length || 0) + (homeTeamData?.injuries.length || 0)}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -271,10 +301,53 @@ function ProbabilityLegend() {
   )
 }
 
-// Quick stats summary
-function QuickStats({ nbaCount, nflCount, totalInjuries }: { nbaCount: number; nflCount: number; totalInjuries: number }) {
+// Betting stats legend
+function BettingStatsLegend() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="glass-card rounded-xl p-4">
+      <p className="text-sm text-gray-400 mb-3">Betting Stats Guide:</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+        <div>
+          <span className="text-white font-medium">ATS</span>
+          <p className="text-gray-500">Against The Spread record</p>
+        </div>
+        <div>
+          <span className="text-white font-medium">O/U</span>
+          <p className="text-gray-500">Over/Under record</p>
+        </div>
+        <div>
+          <span className="text-white font-medium">B2B</span>
+          <p className="text-gray-500">Back-to-back game</p>
+        </div>
+        <div>
+          <span className="text-white font-medium">+R/-R</span>
+          <p className="text-gray-500">Rest advantage</p>
+        </div>
+        <div>
+          <span className="text-white font-medium">Off/Def</span>
+          <p className="text-gray-500">Efficiency ratings</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Quick stats summary
+function QuickStats({
+  nbaCount,
+  nflCount,
+  totalInjuries,
+  backToBackGames,
+  avgATSWinRate
+}: {
+  nbaCount: number
+  nflCount: number
+  totalInjuries: number
+  backToBackGames: number
+  avgATSWinRate: number
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
       <div className="glass-card rounded-xl p-4">
         <div className="text-2xl font-bold text-white">{nbaCount + nflCount}</div>
         <div className="text-xs text-gray-400">Total Games</div>
@@ -291,6 +364,10 @@ function QuickStats({ nbaCount, nflCount, totalInjuries }: { nbaCount: number; n
         <div className="text-2xl font-bold text-yellow-400">{totalInjuries}</div>
         <div className="text-xs text-gray-400">Injuries Reported</div>
       </div>
+      <div className="glass-card rounded-xl p-4">
+        <div className="text-2xl font-bold text-red-400">{backToBackGames}</div>
+        <div className="text-xs text-gray-400">Back-to-Backs</div>
+      </div>
     </div>
   )
 }
@@ -302,7 +379,7 @@ export default async function BettingDashboard() {
     getNFLOdds()
   ])
 
-  // Enrich with team data (injuries, stats, form)
+  // Enrich with team data (injuries, stats, form, betting stats)
   const [enrichedNBA, enrichedNFL] = await Promise.all([
     enrichEvents(nbaOdds, 'nba'),
     enrichEvents(nflOdds, 'nfl')
@@ -319,6 +396,21 @@ export default async function BettingDashboard() {
   const totalInjuries = allEnrichedEvents.reduce((sum, e) => {
     return sum + (e.homeTeamData?.injuries.length || 0) + (e.awayTeamData?.injuries.length || 0)
   }, 0)
+
+  // Calculate back-to-back games
+  const backToBackGames = allEnrichedEvents.filter(e =>
+    e.homeTeamData?.restInfo?.isBackToBack || e.awayTeamData?.restInfo?.isBackToBack
+  ).length
+
+  // Calculate average ATS win rate across all teams
+  const atsRecords = allEnrichedEvents.flatMap(e => [
+    e.homeTeamData?.atsRecord,
+    e.awayTeamData?.atsRecord
+  ]).filter(Boolean) as ATSRecord[]
+
+  const avgATSWinRate = atsRecords.length > 0
+    ? Math.round(atsRecords.reduce((sum, r) => sum + r.percentage, 0) / atsRecords.length)
+    : 50
 
   // Group events by date
   const today = new Date()
@@ -350,7 +442,7 @@ export default async function BettingDashboard() {
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Betting Dashboard</h1>
           <p className="text-gray-400 text-sm sm:text-base">
-            Complete betting analysis with odds, injuries, form, and key stats
+            Complete betting analysis with ATS records, O/U trends, rest indicators, and key stats
           </p>
         </div>
 
@@ -384,12 +476,15 @@ export default async function BettingDashboard() {
                 nbaCount={enrichedNBA.length}
                 nflCount={enrichedNFL.length}
                 totalInjuries={totalInjuries}
+                backToBackGames={backToBackGames}
+                avgATSWinRate={avgATSWinRate}
               />
             </div>
 
-            {/* Legend */}
-            <div className="mb-6">
+            {/* Legends */}
+            <div className="mb-6 space-y-3">
               <ProbabilityLegend />
+              <BettingStatsLegend />
             </div>
 
             {/* Today's Games - Full Cards */}
@@ -400,6 +495,11 @@ export default async function BettingDashboard() {
                   <span className="px-2 py-1 text-xs font-medium bg-primary/20 text-primary rounded-full">
                     {todayEvents.length} games
                   </span>
+                  {todayEvents.some(e => e.homeTeamData?.restInfo?.isBackToBack || e.awayTeamData?.restInfo?.isBackToBack) && (
+                    <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full">
+                      B2B Alert
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {todayEvents.map((enrichedEvent) => (
@@ -410,6 +510,8 @@ export default async function BettingDashboard() {
                       awayTeamData={enrichedEvent.awayTeamData}
                       h2h={enrichedEvent.h2h || undefined}
                       sport={enrichedEvent.sport}
+                      homeLineMovement={enrichedEvent.homeLineMovement}
+                      awayLineMovement={enrichedEvent.awayLineMovement}
                     />
                   ))}
                 </div>
@@ -434,6 +536,8 @@ export default async function BettingDashboard() {
                       awayTeamData={enrichedEvent.awayTeamData}
                       h2h={enrichedEvent.h2h || undefined}
                       sport={enrichedEvent.sport}
+                      homeLineMovement={enrichedEvent.homeLineMovement}
+                      awayLineMovement={enrichedEvent.awayLineMovement}
                     />
                   ))}
                 </div>
@@ -475,6 +579,8 @@ export default async function BettingDashboard() {
                       awayTeamData={enrichedEvent.awayTeamData}
                       h2h={enrichedEvent.h2h || undefined}
                       sport={enrichedEvent.sport}
+                      homeLineMovement={enrichedEvent.homeLineMovement}
+                      awayLineMovement={enrichedEvent.awayLineMovement}
                     />
                   ))}
                 </div>
@@ -486,6 +592,7 @@ export default async function BettingDashboard() {
         {/* Footer info */}
         <div className="mt-10 text-center text-xs sm:text-sm text-gray-500">
           <p>Odds from DraftKings via The Odds API. Team data from ESPN. Lines update every 5 minutes.</p>
+          <p className="mt-1">ATS and O/U records are calculated from recent game performance.</p>
           <p className="mt-1">Always gamble responsibly. Must be 21+ in most states.</p>
         </div>
       </div>

@@ -3,7 +3,20 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { OddsEvent, formatOdds, oddsToPercentage, getProbabilityColor, getProbabilityBarColor } from '@/lib/odds'
-import { Injury, TeamBettingStats, RecentGame, calculateForm } from '@/lib/espn'
+import { Injury, RecentGame, calculateForm } from '@/lib/espn'
+import {
+  ATSRecord,
+  OURecord,
+  RestInfo,
+  LineMovement,
+  formatATSRecord,
+  formatOURecord,
+  getATSColor,
+  getRestColor,
+  getLineMovementBadge,
+  calculateEfficiencyRatings,
+  getRatingColor
+} from '@/lib/bettingStats'
 
 interface TeamData {
   id: string
@@ -19,6 +32,10 @@ interface TeamData {
   pointDiff: number
   recentGames: RecentGame[]
   injuries: Injury[]
+  // New betting stats
+  atsRecord?: ATSRecord
+  ouRecord?: OURecord
+  restInfo?: RestInfo
 }
 
 interface BettingCardProps {
@@ -31,6 +48,8 @@ interface BettingCardProps {
     avgMargin: number
   }
   sport: 'nba' | 'nfl'
+  homeLineMovement?: LineMovement | null
+  awayLineMovement?: LineMovement | null
 }
 
 // Form indicator component - shows W/L for recent games
@@ -44,6 +63,50 @@ function FormIndicator({ results }: { results: ('W' | 'L')[] }) {
             result === 'W'
               ? 'bg-green-500/20 text-green-400'
               : 'bg-red-500/20 text-red-400'
+          }`}
+        >
+          {result}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// ATS indicator - shows recent ATS results
+function ATSIndicator({ results }: { results: ('W' | 'L' | 'P')[] }) {
+  return (
+    <div className="flex gap-0.5">
+      {results.slice(0, 5).map((result, i) => (
+        <span
+          key={i}
+          className={`w-4 h-4 flex items-center justify-center rounded text-[9px] font-bold ${
+            result === 'W'
+              ? 'bg-green-500/20 text-green-400'
+              : result === 'L'
+                ? 'bg-red-500/20 text-red-400'
+                : 'bg-gray-500/20 text-gray-400'
+          }`}
+        >
+          {result}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// O/U indicator - shows recent O/U results
+function OUIndicator({ results }: { results: ('O' | 'U' | 'P')[] }) {
+  return (
+    <div className="flex gap-0.5">
+      {results.slice(0, 5).map((result, i) => (
+        <span
+          key={i}
+          className={`w-4 h-4 flex items-center justify-center rounded text-[9px] font-bold ${
+            result === 'O'
+              ? 'bg-blue-500/20 text-blue-400'
+              : result === 'U'
+                ? 'bg-orange-500/20 text-orange-400'
+                : 'bg-gray-500/20 text-gray-400'
           }`}
         >
           {result}
@@ -96,7 +159,6 @@ function StreakBadge({ results }: { results: ('W' | 'L')[] }) {
 
 // Value bet indicator - underdog with good recent form
 function ValueBetBadge({ percentage, formWins }: { percentage: number; formWins: number }) {
-  // Value bet: underdog (30-45%) with good form (3+ wins in last 5)
   const isValue = percentage < 45 && percentage >= 20 && formWins >= 3
   if (!isValue) return null
 
@@ -106,6 +168,67 @@ function ValueBetBadge({ percentage, formWins }: { percentage: number; formWins:
         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
       </svg>
       VALUE
+    </span>
+  )
+}
+
+// Rest indicator badge
+function RestBadge({ restInfo, opponentRest }: { restInfo: RestInfo; opponentRest?: RestInfo }) {
+  const restAdvantage = opponentRest ? restInfo.daysOfRest - opponentRest.daysOfRest : 0
+
+  if (restInfo.isBackToBack) {
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 flex items-center gap-1">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        B2B
+      </span>
+    )
+  }
+
+  if (restAdvantage >= 2) {
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 flex items-center gap-1">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        +{restAdvantage}R
+      </span>
+    )
+  }
+
+  if (restAdvantage <= -2) {
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-400 flex items-center gap-1">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+        {restAdvantage}R
+      </span>
+    )
+  }
+
+  return null
+}
+
+// Line movement badge
+function LineMovementBadge({ movement }: { movement: LineMovement }) {
+  const badge = getLineMovementBadge(movement)
+  if (!badge) return null
+
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${badge.color}`}>
+      {badge.icon === 'up' ? (
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+        </svg>
+      ) : (
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+      )}
+      {badge.text}
     </span>
   )
 }
@@ -130,7 +253,6 @@ function InjuryBadge({ status }: { status: Injury['status'] }) {
 
 // Compact injury list showing top injuries
 function InjuryList({ injuries, limit = 3 }: { injuries: Injury[]; limit?: number }) {
-  // Sort by severity (Out first, then Doubtful, etc.)
   const severityOrder = ['Out', 'Doubtful', 'Questionable', 'Day-To-Day', 'Probable', 'Unknown']
   const sorted = [...injuries].sort((a, b) =>
     severityOrder.indexOf(a.status) - severityOrder.indexOf(b.status)
@@ -196,7 +318,96 @@ function StatBar({ leftValue, rightValue, leftLabel, rightLabel }: {
   )
 }
 
-export default function BettingCard({ event, homeTeamData, awayTeamData, h2h, sport }: BettingCardProps) {
+// ATS/O/U stats row
+function BettingStatsRow({ teamData, isHome, sport }: { teamData: TeamData; isHome: boolean; sport: 'nba' | 'nfl' }) {
+  const efficiency = calculateEfficiencyRatings(teamData.recentGames, sport)
+
+  return (
+    <div className="space-y-2 text-xs">
+      {/* ATS Record */}
+      {teamData.atsRecord && (
+        <div className="flex items-center justify-between">
+          <span className="text-gray-400">ATS:</span>
+          <div className="flex items-center gap-2">
+            <span className={`font-mono ${getATSColor(teamData.atsRecord.percentage)}`}>
+              {teamData.atsRecord.wins}-{teamData.atsRecord.losses}
+              {teamData.atsRecord.pushes > 0 && `-${teamData.atsRecord.pushes}`}
+            </span>
+            <span className={`text-[10px] ${getATSColor(teamData.atsRecord.percentage)}`}>
+              ({teamData.atsRecord.percentage}%)
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Home/Away ATS Split */}
+      {teamData.atsRecord && (
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-gray-500">{isHome ? 'Home' : 'Away'} ATS:</span>
+          {isHome && teamData.atsRecord.homeATS ? (
+            <span className="text-gray-400 font-mono">
+              {teamData.atsRecord.homeATS.wins}-{teamData.atsRecord.homeATS.losses}
+            </span>
+          ) : !isHome && teamData.atsRecord.awayATS ? (
+            <span className="text-gray-400 font-mono">
+              {teamData.atsRecord.awayATS.wins}-{teamData.atsRecord.awayATS.losses}
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {/* O/U Record */}
+      {teamData.ouRecord && (
+        <div className="flex items-center justify-between">
+          <span className="text-gray-400">O/U:</span>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-300 font-mono">
+              {teamData.ouRecord.overs}O-{teamData.ouRecord.unders}U
+            </span>
+            <span className="text-[10px] text-gray-500">
+              (Avg: {teamData.ouRecord.averageTotalPoints})
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Recent ATS */}
+      {teamData.atsRecord?.recentATS && teamData.atsRecord.recentATS.length > 0 && (
+        <div className="flex items-center justify-between">
+          <span className="text-gray-500 text-[10px]">Last 5 ATS:</span>
+          <ATSIndicator results={teamData.atsRecord.recentATS} />
+        </div>
+      )}
+
+      {/* Efficiency Ratings */}
+      <div className="flex items-center justify-between pt-1 border-t border-white/5">
+        <span className="text-gray-400">Off/Def:</span>
+        <div className="flex items-center gap-1">
+          <span className={`font-mono text-[10px] ${getRatingColor(efficiency.offRating)}`}>
+            {efficiency.offRating}
+          </span>
+          <span className="text-gray-600">/</span>
+          <span className={`font-mono text-[10px] ${getRatingColor(efficiency.defRating, true)}`}>
+            {efficiency.defRating}
+          </span>
+          <span className={`text-[10px] ml-1 ${efficiency.netRating > 0 ? 'text-green-400' : efficiency.netRating < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+            ({efficiency.netRating > 0 ? '+' : ''}{efficiency.netRating})
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function BettingCard({
+  event,
+  homeTeamData,
+  awayTeamData,
+  h2h,
+  sport,
+  homeLineMovement,
+  awayLineMovement
+}: BettingCardProps) {
   const gameTime = new Date(event.commence_time)
   const isLive = gameTime <= new Date()
 
@@ -310,25 +521,38 @@ export default function BettingCard({ event, homeTeamData, awayTeamData, h2h, sp
               )}
             </div>
 
-            {/* Away Spread */}
+            {/* Away Spread with Line Movement */}
             {awaySpread && (
               <div className="px-3 py-2 bg-white/5 rounded-lg mb-3">
-                <div className="text-xs text-gray-400">Spread</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-gray-400">Spread</div>
+                  {awayLineMovement && <LineMovementBadge movement={awayLineMovement} />}
+                </div>
                 <div className="text-lg font-mono text-white">
                   {awaySpread.point! > 0 ? '+' : ''}{awaySpread.point}
                 </div>
               </div>
             )}
 
-            {/* Away Form */}
+            {/* Away Form & Badges */}
             {awayForm && (
               <div className="mb-3">
-                <div className="text-xs text-gray-400 mb-1 flex items-center gap-2">
+                <div className="text-xs text-gray-400 mb-1 flex items-center gap-2 flex-wrap">
                   Last 5: {awayForm.record}
                   <StreakBadge results={awayForm.results} />
                   <ValueBetBadge percentage={awayPercentage} formWins={awayForm.results.filter(r => r === 'W').length} />
+                  {awayTeamData?.restInfo && (
+                    <RestBadge restInfo={awayTeamData.restInfo} opponentRest={homeTeamData?.restInfo} />
+                  )}
                 </div>
                 <FormIndicator results={awayForm.results} />
+              </div>
+            )}
+
+            {/* Away Betting Stats */}
+            {awayTeamData && (awayTeamData.atsRecord || awayTeamData.ouRecord) && (
+              <div className="mb-3 p-2 bg-white/[0.02] rounded-lg">
+                <BettingStatsRow teamData={awayTeamData} isHome={false} sport={sport} />
               </div>
             )}
 
@@ -411,25 +635,38 @@ export default function BettingCard({ event, homeTeamData, awayTeamData, h2h, sp
               )}
             </div>
 
-            {/* Home Spread */}
+            {/* Home Spread with Line Movement */}
             {homeSpread && (
               <div className="px-3 py-2 bg-white/5 rounded-lg mb-3">
-                <div className="text-xs text-gray-400">Spread</div>
+                <div className="flex items-center justify-between">
+                  {homeLineMovement && <LineMovementBadge movement={homeLineMovement} />}
+                  <div className="text-xs text-gray-400">Spread</div>
+                </div>
                 <div className="text-lg font-mono text-white">
                   {homeSpread.point! > 0 ? '+' : ''}{homeSpread.point}
                 </div>
               </div>
             )}
 
-            {/* Home Form */}
+            {/* Home Form & Badges */}
             {homeForm && (
               <div className="mb-3 flex flex-col items-end">
-                <div className="text-xs text-gray-400 mb-1 flex items-center gap-2 justify-end">
+                <div className="text-xs text-gray-400 mb-1 flex items-center gap-2 justify-end flex-wrap">
+                  {homeTeamData?.restInfo && (
+                    <RestBadge restInfo={homeTeamData.restInfo} opponentRest={awayTeamData?.restInfo} />
+                  )}
                   <ValueBetBadge percentage={homePercentage} formWins={homeForm.results.filter(r => r === 'W').length} />
                   <StreakBadge results={homeForm.results} />
                   Last 5: {homeForm.record}
                 </div>
                 <FormIndicator results={homeForm.results} />
+              </div>
+            )}
+
+            {/* Home Betting Stats */}
+            {homeTeamData && (homeTeamData.atsRecord || homeTeamData.ouRecord) && (
+              <div className="mb-3 p-2 bg-white/[0.02] rounded-lg text-left">
+                <BettingStatsRow teamData={homeTeamData} isHome={true} sport={sport} />
               </div>
             )}
 

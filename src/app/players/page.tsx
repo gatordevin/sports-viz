@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { BDLPlayer, BDLSeasonAverage } from '@/lib/balldontlie'
@@ -105,12 +106,16 @@ function PlayerSearchCard({ player, seasonAvg }: { player: BDLPlayer; seasonAvg?
 }
 
 export default function PlayersPage() {
-  const [searchQuery, setSearchQuery] = useState('')
+  const searchParams = useSearchParams()
+  const initialSearch = searchParams.get('search') || ''
+
+  const [searchQuery, setSearchQuery] = useState(initialSearch)
   const [players, setPlayers] = useState<BDLPlayer[]>([])
   const [seasonAverages, setSeasonAverages] = useState<Record<number, BDLSeasonAverage>>({})
   const [loading, setLoading] = useState(false)
   const [loadingStats, setLoadingStats] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [initialSearchDone, setInitialSearchDone] = useState(false)
 
   const searchPlayers = async (query: string) => {
     if (query.length < 2) {

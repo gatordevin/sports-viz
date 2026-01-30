@@ -28,19 +28,21 @@ interface PlayerCardProps {
   }
 }
 
-// Helper to find BDL player ID from ESPN player
-// Note: This is an approximation - in a real app you'd have a mapping table
-function estimateBDLPlayerId(espnPlayer: ESPNPlayer): number | null {
-  // For now, return null - the search page uses BDL IDs directly
-  // ESPN and BDL use different ID systems
-  return null
+// Helper to create search URL for a player
+function getPlayerSearchUrl(espnPlayer: ESPNPlayer): string {
+  // Link to player search with the player's name pre-filled
+  const searchName = encodeURIComponent(espnPlayer.displayName)
+  return `/players?search=${searchName}`
 }
 
 export default function PlayerCard({ player, teamId, sport = 'nba', compact = false, bdlPlayerId, stats }: PlayerCardProps) {
   // Determine if we can link to player detail page
-  // Currently only NBA players via BDL search have detail pages
-  const playerId = bdlPlayerId || estimateBDLPlayerId(player)
-  const canLink = playerId !== null
+  // If we have a BDL ID, link directly. Otherwise, link to search with player name
+  const directLink = bdlPlayerId ? `/players/${bdlPlayerId}` : null
+  const searchLink = getPlayerSearchUrl(player)
+  const playerLink = directLink || searchLink
+  // NBA players can always link (to search or direct), NFL players go to search
+  const canLink = sport === 'nba'
 
   const cardContent = (
     <>
@@ -263,7 +265,7 @@ export default function PlayerCard({ player, teamId, sport = 'nba', compact = fa
     if (canLink) {
       return (
         <Link
-          href={`/players/${playerId}`}
+          href={playerLink}
           className="glass rounded-lg hover:bg-white/5 transition-colors block group"
         >
           {compactContent}
@@ -282,7 +284,7 @@ export default function PlayerCard({ player, teamId, sport = 'nba', compact = fa
   if (canLink) {
     return (
       <Link
-        href={`/players/${playerId}`}
+        href={playerLink}
         className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300 animate-fade-in block group cursor-pointer"
       >
         {cardContent}

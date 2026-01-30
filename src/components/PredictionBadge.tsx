@@ -150,6 +150,46 @@ export function PredictedLines({ prediction, marketSpread, marketTotal }: Predic
 // VALUE BET ALERT
 // ============================================
 
+// Helper function to get bet side badge styling
+function getBetSideBadge(betSide: ValueBet['betSide']): { icon: string; label: string; colors: string } {
+  switch (betSide) {
+    case 'underdog':
+      return {
+        icon: '🐕',
+        label: 'UNDERDOG',
+        colors: 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+      }
+    case 'favorite':
+      return {
+        icon: '👑',
+        label: 'FAVORITE',
+        colors: 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+      }
+    case 'over':
+      return {
+        icon: '📈',
+        label: 'OVER',
+        colors: 'bg-green-500/20 text-green-400 border-green-500/30'
+      }
+    case 'under':
+      return {
+        icon: '📉',
+        label: 'UNDER',
+        colors: 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+      }
+  }
+}
+
+// Helper function to get bet type label
+function getBetTypeLabel(betType: ValueBet['betType']): string {
+  switch (betType) {
+    case 'spread': return 'SPREAD'
+    case 'moneyline': return 'MONEYLINE'
+    case 'total_over': return 'TOTAL'
+    case 'total_under': return 'TOTAL'
+  }
+}
+
 interface ValueBetAlertProps {
   valueBets: ValueBet[]
   compact?: boolean
@@ -159,15 +199,14 @@ export function ValueBetAlert({ valueBets, compact = false }: ValueBetAlertProps
   if (valueBets.length === 0) return null
 
   const topBet = valueBets[0]
+  const sideBadge = getBetSideBadge(topBet.betSide)
 
   if (compact) {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/30">
-        <svg className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-        <span className="text-[10px] font-bold text-amber-400">VALUE</span>
-        <span className="text-[10px] text-white">{topBet.recommendation}</span>
+      <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${sideBadge.colors}`}>
+        <span className="text-sm">{sideBadge.icon}</span>
+        <span className="text-[10px] font-bold">{sideBadge.label}</span>
+        <span className="text-[10px] text-white font-medium">{topBet.teamToBet}</span>
         <span className={`text-[10px] font-mono ${getEdgeColor(topBet.edge)}`}>+{topBet.edge}pt</span>
       </div>
     )
@@ -175,31 +214,47 @@ export function ValueBetAlert({ valueBets, compact = false }: ValueBetAlertProps
 
   return (
     <div className="p-3 rounded-lg bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-3">
         <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
         <span className="text-sm font-bold text-amber-400">VALUE BETS FOUND</span>
       </div>
 
-      <div className="space-y-2">
-        {valueBets.slice(0, 3).map((bet, i) => (
-          <div key={i} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getConfidenceBgColor(bet.confidence)} ${getConfidenceColor(bet.confidence)}`}>
-                {bet.confidence.toUpperCase()}
-              </span>
-              <span className="text-white font-medium">{bet.recommendation}</span>
+      <div className="space-y-3">
+        {valueBets.slice(0, 3).map((bet, i) => {
+          const badge = getBetSideBadge(bet.betSide)
+          return (
+            <div key={i} className="p-2 bg-white/5 rounded-lg">
+              {/* Top row: Side badge + bet type + confidence */}
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badge.colors}`}>
+                  {badge.icon} {badge.label}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/10 text-gray-300">
+                  {getBetTypeLabel(bet.betType)}
+                </span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getConfidenceBgColor(bet.confidence)} ${getConfidenceColor(bet.confidence)}`}>
+                  {bet.confidence.toUpperCase()}
+                </span>
+              </div>
+
+              {/* Main bet description */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-white font-semibold">
+                  {bet.betDescription}
+                </span>
+                <span className={`font-mono font-bold text-sm ${getEdgeColor(bet.edge)}`}>
+                  +{bet.edge}pt edge
+                </span>
+              </div>
             </div>
-            <span className={`font-mono font-bold ${getEdgeColor(bet.edge)}`}>
-              +{bet.edge}pt edge
-            </span>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {valueBets.length > 0 && (
-        <p className="text-[10px] text-gray-500 mt-2">
+        <p className="text-[10px] text-gray-500 mt-3 pt-2 border-t border-white/5">
           {topBet.explanation}
         </p>
       )}
@@ -346,12 +401,22 @@ export function PredictionsSummary({ predictions, sport }: PredictionsSummaryPro
               Top Value Bets
             </h4>
             <div className="space-y-2">
-              {topValueBets.map((bet, i) => (
-                <div key={i} className="flex items-center justify-between text-xs p-2 bg-white/5 rounded">
-                  <span className="text-white font-medium">{bet.recommendation}</span>
-                  <span className={`font-mono font-bold ${getEdgeColor(bet.edge)}`}>+{bet.edge}pt</span>
-                </div>
-              ))}
+              {topValueBets.map((bet, i) => {
+                const sideIcon = bet.betSide === 'underdog' ? '🐕' : bet.betSide === 'favorite' ? '👑' : bet.betSide === 'over' ? '📈' : '📉'
+                const sideColor = bet.betSide === 'underdog' ? 'text-purple-400' :
+                                 bet.betSide === 'favorite' ? 'text-amber-400' :
+                                 bet.betSide === 'over' ? 'text-green-400' : 'text-blue-400'
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs p-2 bg-white/5 rounded">
+                    <div className="flex items-center gap-2">
+                      <span className={`${sideColor}`}>{sideIcon}</span>
+                      <span className="text-white font-medium">{bet.teamToBet}</span>
+                      <span className="text-gray-500 text-[10px]">{bet.betType === 'moneyline' ? 'ML' : bet.betType === 'spread' ? 'SPR' : 'TOT'}</span>
+                    </div>
+                    <span className={`font-mono font-bold ${getEdgeColor(bet.edge)}`}>+{bet.edge}pt</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

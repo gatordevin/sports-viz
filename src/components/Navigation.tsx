@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs'
 import { isProUser } from '@/lib/admin'
+import { Alert } from '@/lib/alerts'
+import { AlertsDropdown } from './AlertsPanel'
 
 const navItems = [
   { name: 'Dashboard', href: '/' },
@@ -16,12 +18,73 @@ const navItems = [
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [alertsOpen, setAlertsOpen] = useState(false)
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const pathname = usePathname()
-  const { user } = useUser()
+  const router = useRouter()
+  const { user, isLoaded } = useUser()
   const userEmail = user?.primaryEmailAddress?.emailAddress
   const isPro = isProUser(userEmail)
 
   const closeMenu = () => setMobileMenuOpen(false)
+
+  // Fetch alerts
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/alerts')
+      if (response.ok) {
+        const data = await response.json()
+        setAlerts(data.alerts || [])
+        setUnreadCount(data.unreadCount || 0)
+      }
+    } catch (error) {
+      console.error('Error fetching alerts:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isLoaded && user) {
+      fetchAlerts()
+      // Refresh alerts every 2 minutes
+      const interval = setInterval(fetchAlerts, 120000)
+      return () => clearInterval(interval)
+    }
+  }, [isLoaded, user, fetchAlerts])
+
+  const handleMarkRead = async (alertId: string) => {
+    try {
+      await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_read', alertId })
+      })
+      setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, read: true } : a))
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Error marking alert read:', error)
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      const alertIds = alerts.filter(a => !a.read).map(a => a.id)
+      await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_all_read', alertIds })
+      })
+      setAlerts(prev => prev.map(a => ({ ...a, read: true })))
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Error marking all alerts read:', error)
+    }
+  }
+
+  const handleViewAll = () => {
+    setAlertsOpen(false)
+    router.push('/alerts')
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-900/95 backdrop-blur-lg border-b border-white/5">
@@ -87,6 +150,35 @@ export default function Navigation() {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
+              {/* Alerts Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setAlertsOpen(!alertsOpen)}
+                  className="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Alerts"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[10px] font-bold bg-red-500 rounded-full text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Alerts Dropdown */}
+                {alertsOpen && (
+                  <AlertsDropdown
+                    alerts={alerts}
+                    onMarkRead={handleMarkRead}
+                    onMarkAllRead={handleMarkAllRead}
+                    onClose={() => setAlertsOpen(false)}
+                    onViewAll={handleViewAll}
+                  />
+                )}
+              </div>
+
               {isPro ? (
                 <span className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center gap-1.5">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -183,6 +275,27 @@ export default function Navigation() {
               </Link>
             )
           })}
+
+          {/* Alerts Link for Mobile */}
+          <SignedIn>
+            <Link
+              href="/alerts"
+              onClick={closeMenu}
+              className="flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 min-h-[48px] text-gray-400 hover:text-white hover:bg-white/5"
+            >
+              <span className="flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Alerts
+              </span>
+              {unreadCount > 0 && (
+                <span className="px-2 py-1 text-xs font-bold bg-red-500 rounded-full text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </Link>
+          </SignedIn>
 
           {/* Mobile Auth Section */}
           <div className="pt-4 mt-4 border-t border-white/10">

@@ -63,6 +63,10 @@ export interface ValueBet {
   ourLine: number
   marketLine: number
   explanation: string
+  // New fields for clear labeling
+  betSide: 'underdog' | 'favorite' | 'over' | 'under'
+  teamToBet: string // team name for spread/ML bets, or "Over"/"Under" for totals
+  betDescription: string // e.g., "Bet LAKERS +5.5 (Underdog)"
 }
 
 // ============================================
@@ -411,6 +415,11 @@ export function findValueBets(
 ): ValueBet[] {
   const valueBets: ValueBet[] = []
 
+  // Determine who is the market favorite (negative spread = favorite)
+  const homeIsFavorite = marketOdds.spread < 0
+  const favoriteTeam = homeIsFavorite ? prediction.homeTeam : prediction.awayTeam
+  const underdogTeam = homeIsFavorite ? prediction.awayTeam : prediction.homeTeam
+
   // 1. Spread Value
   // Our predicted spread vs market spread
   // If we predict home -5 and market is home -3, we should bet home spread
@@ -419,6 +428,15 @@ export function findValueBets(
   if (Math.abs(spreadDiff) >= 2) { // At least 2 point edge
     const edge = Math.abs(spreadDiff)
     const betOnHome = spreadDiff > 0 // Market has home as bigger underdog than we do
+
+    // Determine if we're betting on the underdog or favorite
+    const teamToBet = betOnHome ? prediction.homeTeam : prediction.awayTeam
+    const spreadForBet = betOnHome ? marketOdds.spread : -marketOdds.spread
+    const isBettingUnderdog = betOnHome ? !homeIsFavorite : homeIsFavorite
+    const betSide: 'underdog' | 'favorite' = isBettingUnderdog ? 'underdog' : 'favorite'
+
+    const sideLabel = isBettingUnderdog ? 'UNDERDOG' : 'FAVORITE'
+    const betDescription = `Bet ${teamToBet} ${spreadForBet > 0 ? '+' : ''}${spreadForBet} (${sideLabel})`
 
     valueBets.push({
       gameId,
@@ -430,7 +448,10 @@ export function findValueBets(
       confidence: edge >= 4 ? 'high' : edge >= 3 ? 'medium' : 'low',
       ourLine: prediction.predictedSpread,
       marketLine: marketOdds.spread,
-      explanation: `Our model: ${prediction.homeTeam} ${prediction.predictedSpread > 0 ? '+' : ''}${prediction.predictedSpread}, Market: ${marketOdds.spread > 0 ? '+' : ''}${marketOdds.spread}`
+      explanation: `Our model: ${prediction.homeTeam} ${prediction.predictedSpread > 0 ? '+' : ''}${prediction.predictedSpread}, Market: ${marketOdds.spread > 0 ? '+' : ''}${marketOdds.spread}`,
+      betSide,
+      teamToBet,
+      betDescription
     })
   }
 
@@ -441,6 +462,9 @@ export function findValueBets(
   if (Math.abs(totalDiff) >= 3) { // At least 3 point edge on total
     const edge = Math.abs(totalDiff)
     const betOver = totalDiff > 0
+    const betSide: 'over' | 'under' = betOver ? 'over' : 'under'
+    const teamToBet = betOver ? 'OVER' : 'UNDER'
+    const betDescription = `Take ${teamToBet} ${marketOdds.total} points`
 
     valueBets.push({
       gameId,
@@ -450,7 +474,10 @@ export function findValueBets(
       confidence: edge >= 6 ? 'high' : edge >= 4 ? 'medium' : 'low',
       ourLine: prediction.predictedTotal,
       marketLine: marketOdds.total,
-      explanation: `Our model: ${prediction.predictedTotal} total, Market: ${marketOdds.total}`
+      explanation: `Our model: ${prediction.predictedTotal} total, Market: ${marketOdds.total}`,
+      betSide,
+      teamToBet,
+      betDescription
     })
   }
 
@@ -471,6 +498,11 @@ export function findValueBets(
 
   // Only add ML value if significant edge and reasonable odds
   if (homeMLEdge >= 5 && marketOdds.homeMoneyline >= -200) {
+    const isBettingUnderdog = !homeIsFavorite
+    const betSide: 'underdog' | 'favorite' = isBettingUnderdog ? 'underdog' : 'favorite'
+    const sideLabel = isBettingUnderdog ? 'UNDERDOG' : 'FAVORITE'
+    const betDescription = `Bet ${prediction.homeTeam} ML (${sideLabel})`
+
     valueBets.push({
       gameId,
       betType: 'moneyline',
@@ -479,11 +511,19 @@ export function findValueBets(
       confidence: homeMLEdge >= 10 ? 'high' : homeMLEdge >= 7 ? 'medium' : 'low',
       ourLine: ourHomeProb,
       marketLine: homeImpliedProb,
-      explanation: `Our model: ${ourHomeProb.toFixed(0)}% win, Market implies: ${homeImpliedProb.toFixed(0)}%`
+      explanation: `Our model: ${ourHomeProb.toFixed(0)}% win, Market implies: ${homeImpliedProb.toFixed(0)}%`,
+      betSide,
+      teamToBet: prediction.homeTeam,
+      betDescription
     })
   }
 
   if (awayMLEdge >= 5 && marketOdds.awayMoneyline >= -200) {
+    const isBettingUnderdog = homeIsFavorite
+    const betSide: 'underdog' | 'favorite' = isBettingUnderdog ? 'underdog' : 'favorite'
+    const sideLabel = isBettingUnderdog ? 'UNDERDOG' : 'FAVORITE'
+    const betDescription = `Bet ${prediction.awayTeam} ML (${sideLabel})`
+
     valueBets.push({
       gameId,
       betType: 'moneyline',
@@ -492,7 +532,10 @@ export function findValueBets(
       confidence: awayMLEdge >= 10 ? 'high' : awayMLEdge >= 7 ? 'medium' : 'low',
       ourLine: ourAwayProb,
       marketLine: awayImpliedProb,
-      explanation: `Our model: ${ourAwayProb.toFixed(0)}% win, Market implies: ${awayImpliedProb.toFixed(0)}%`
+      explanation: `Our model: ${ourAwayProb.toFixed(0)}% win, Market implies: ${awayImpliedProb.toFixed(0)}%`,
+      betSide,
+      teamToBet: prediction.awayTeam,
+      betDescription
     })
   }
 

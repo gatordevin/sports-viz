@@ -280,18 +280,28 @@ export function AlertsDropdown({ alerts, onMarkRead, onMarkAllRead, onClose, onV
   )
 }
 
-// Helper
-function getTimeAgo(date: Date | string): string {
-  const now = new Date()
-  // Handle both Date objects and ISO strings from JSON serialization
-  const dateObj = typeof date === 'string' ? new Date(date) : date
-  const diffMs = now.getTime() - dateObj.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMins / 60)
-  const diffDays = Math.floor(diffHours / 24)
+// Helper - handles Date objects, ISO strings, and invalid values safely
+function getTimeAgo(date: Date | string | unknown): string {
+  try {
+    const now = new Date()
+    // Always wrap in new Date() - this handles both Date objects and strings safely
+    const dateObj = new Date(date as string | Date)
 
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  return `${diffDays}d ago`
+    // Check for invalid date
+    if (isNaN(dateObj.getTime())) {
+      return 'Unknown'
+    }
+
+    const diffMs = now.getTime() - dateObj.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    return `${diffDays}d ago`
+  } catch {
+    return 'Unknown'
+  }
 }

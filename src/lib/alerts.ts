@@ -106,10 +106,15 @@ export function generateAlerts(
     const priorityOrder = { high: 0, medium: 1, low: 2 }
     const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
     if (priorityDiff !== 0) return priorityDiff
-    // Handle both Date objects and ISO strings from JSON serialization
-    const aTime = typeof a.createdAt === 'string' ? new Date(a.createdAt).getTime() : a.createdAt.getTime()
-    const bTime = typeof b.createdAt === 'string' ? new Date(b.createdAt).getTime() : b.createdAt.getTime()
-    return bTime - aTime
+    // Always wrap in new Date() to handle both Date objects and ISO strings safely
+    // This is defensive coding - JSON serialization converts Date to string
+    try {
+      const aTime = new Date(a.createdAt).getTime()
+      const bTime = new Date(b.createdAt).getTime()
+      return bTime - aTime
+    } catch {
+      return 0 // Fallback: keep original order if date parsing fails
+    }
   })
 }
 
@@ -265,21 +270,31 @@ export function formatAlertMessage(alert: Alert): string {
 }
 
 /**
- * Get time ago string
+ * Get time ago string - handles Date objects, ISO strings, and invalid values
  */
-function getTimeAgo(date: Date | string): string {
-  const now = new Date()
-  // Handle both Date objects and ISO strings from JSON serialization
-  const dateObj = typeof date === 'string' ? new Date(date) : date
-  const diffMs = now.getTime() - dateObj.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMins / 60)
-  const diffDays = Math.floor(diffHours / 24)
+function getTimeAgo(date: Date | string | unknown): string {
+  try {
+    const now = new Date()
+    // Always wrap in new Date() - this handles both Date objects and strings safely
+    const dateObj = new Date(date as string | Date)
 
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  return `${diffDays}d ago`
+    // Check for invalid date
+    if (isNaN(dateObj.getTime())) {
+      return 'Unknown'
+    }
+
+    const diffMs = now.getTime() - dateObj.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    return `${diffDays}d ago`
+  } catch {
+    return 'Unknown'
+  }
 }
 
 /**

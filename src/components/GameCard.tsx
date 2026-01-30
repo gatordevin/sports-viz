@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Game } from '@/lib/espn'
 
@@ -8,9 +9,14 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game }: GameCardProps) {
+  const [mounted, setMounted] = useState(false)
   const isLive = game.status.type.state === 'in'
   const isScheduled = game.status.type.state === 'pre'
   const isFinished = game.status.type.completed
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const formatGameTime = () => {
     if (isLive) {
@@ -18,6 +24,10 @@ export default function GameCard({ game }: GameCardProps) {
     }
     if (isFinished) {
       return 'Final'
+    }
+    // Only format time on client to avoid hydration mismatch
+    if (!mounted) {
+      return '--:-- --'
     }
     const date = new Date(game.date)
     return date.toLocaleTimeString('en-US', {

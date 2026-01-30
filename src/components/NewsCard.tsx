@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { ESPNNews } from '@/lib/espn'
 
@@ -8,7 +9,11 @@ interface NewsCardProps {
   compact?: boolean
 }
 
-function formatTimeAgo(dateString: string): string {
+function formatTimeAgo(dateString: string, mounted: boolean): string {
+  // Return placeholder until client-side hydration to avoid mismatch
+  if (!mounted) {
+    return '...'
+  }
   const date = new Date(dateString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -27,8 +32,13 @@ function formatTimeAgo(dateString: string): string {
 }
 
 export default function NewsCard({ article, compact = false }: NewsCardProps) {
+  const [mounted, setMounted] = useState(false)
   const imageUrl = article.images?.[0]?.url
   const link = article.links?.[0]?.href || '#'
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   if (compact) {
     return (
@@ -53,7 +63,7 @@ export default function NewsCard({ article, compact = false }: NewsCardProps) {
             <h4 className="font-medium text-sm text-white line-clamp-2 group-hover:text-primary transition-colors">
               {article.headline}
             </h4>
-            <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(article.published)}</p>
+            <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(article.published, mounted)}</p>
           </div>
         </div>
       </a>
@@ -88,7 +98,7 @@ export default function NewsCard({ article, compact = false }: NewsCardProps) {
               {cat.description}
             </span>
           ))}
-          <span className="text-xs text-gray-500">{formatTimeAgo(article.published)}</span>
+          <span className="text-xs text-gray-500">{formatTimeAgo(article.published, mounted)}</span>
         </div>
         <h3 className="font-bold text-lg text-white group-hover:text-primary transition-colors line-clamp-2 mb-2">
           {article.headline}

@@ -1,8 +1,9 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
 import { BDLPlayer } from '@/lib/balldontlie'
+import { getPlayerHeadshotURLSync } from '@/lib/playerHeadshots'
+import PlayerHeadshot from './PlayerHeadshot'
 
 interface BDLPlayerCardProps {
   player: BDLPlayer
@@ -14,29 +15,23 @@ interface BDLPlayerCardProps {
   }
 }
 
-// Helper to get ESPN headshot URL from BDL player data
-// ESPN doesn't use BDL IDs, so we construct a URL that might work
-// If it doesn't load, we fall back to initials
-function getPlayerHeadshot(player: BDLPlayer): string | null {
-  // ESPN headshots require their own ID system, so we'll use a placeholder approach
-  // The headshot will show initials as fallback
-  return null
-}
-
 export default function BDLPlayerCard({ player, compact = false, stats }: BDLPlayerCardProps) {
   // Since we're using BDL data, we can directly link to /players/[id] with the BDL ID
   const playerLink = `/players/${player.id}`
+
+  // Get headshot URL using sync version (client component)
+  const headshotUrl = getPlayerHeadshotURLSync(player.id)
 
   const cardContent = (
     <>
       {/* Player Header */}
       <div className="flex items-start space-x-4">
-        <div className="w-16 h-16 sm:w-20 sm:h-20 relative flex-shrink-0 rounded-full overflow-hidden bg-gray-800">
-          {/* Initials as background */}
-          <div className="w-full h-full flex items-center justify-center text-xl font-bold text-gray-500">
-            {player.first_name?.[0]}{player.last_name?.[0]}
-          </div>
-        </div>
+        <PlayerHeadshot
+          src={headshotUrl}
+          firstName={player.first_name}
+          lastName={player.last_name}
+          size="medium"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2">
             <h3 className="font-bold text-lg truncate text-white group-hover:text-primary transition-colors">
@@ -117,11 +112,12 @@ export default function BDLPlayerCard({ player, compact = false, stats }: BDLPla
     const compactContent = (
       <div className="flex items-center justify-between py-3 px-4">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 relative flex-shrink-0 rounded-full overflow-hidden bg-gray-800">
-            <div className="w-full h-full flex items-center justify-center text-sm font-bold text-gray-500">
-              {player.first_name?.[0]}{player.last_name?.[0]}
-            </div>
-          </div>
+          <PlayerHeadshot
+            src={headshotUrl}
+            firstName={player.first_name}
+            lastName={player.last_name}
+            size="small"
+          />
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-medium text-sm text-white group-hover:text-primary transition-colors">

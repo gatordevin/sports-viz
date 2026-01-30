@@ -1,15 +1,9 @@
-import Image from 'next/image'
 import Link from 'next/link'
-import { getPlayer, getSeasonAverages, getPlayerStats, bdlToEspnTeamId, BDLPlayer, BDLSeasonAverage, BDLPlayerStats } from '@/lib/balldontlie'
+import { getPlayer, getSeasonAverages, getPlayerStats, bdlToEspnTeamId, getTeamAbbr, BDLPlayer, BDLSeasonAverage, BDLPlayerStats } from '@/lib/balldontlie'
+import { getPlayerHeadshotURL } from '@/lib/playerHeadshots'
+import PlayerHeadshot from '@/components/PlayerHeadshot'
 
 export const revalidate = 1800 // Revalidate every 30 minutes
-
-// Helper to get ESPN headshot URL from BDL player data
-function getPlayerHeadshot(player: BDLPlayer): string {
-  // Try to construct ESPN headshot URL - they use a standard format
-  // ESPN headshots are available at predictable URLs
-  return `https://a.espncdn.com/combiner/i?img=/i/headshots/nba/players/full/${player.id}.png&w=350&h=254`
-}
 
 // Format stat with one decimal place
 function formatStat(value: number | undefined): string {
@@ -42,11 +36,11 @@ function GameLogRow({ stat }: { stat: BDLPlayerStats }) {
     day: 'numeric'
   })
 
-  const opponent = stat.game.home_team.id === stat.team.id
-    ? stat.game.visitor_team
-    : stat.game.home_team
+  // Determine opponent using team IDs (stats API uses home_team_id/visitor_team_id)
+  const isHome = stat.game.home_team_id === stat.team.id
+  const opponentId = isHome ? stat.game.visitor_team_id : stat.game.home_team_id
+  const opponentAbbr = getTeamAbbr(opponentId)
 
-  const isHome = stat.game.home_team.id === stat.team.id
   const teamScore = isHome ? stat.game.home_team_score : stat.game.visitor_team_score
   const oppScore = isHome ? stat.game.visitor_team_score : stat.game.home_team_score
   const won = teamScore > oppScore
@@ -56,7 +50,7 @@ function GameLogRow({ stat }: { stat: BDLPlayerStats }) {
       <td className="py-3 px-2 text-sm text-gray-400">{gameDate}</td>
       <td className="py-3 px-2 text-sm">
         <span className="text-gray-500">{isHome ? 'vs' : '@'}</span>{' '}
-        <span className="text-white">{opponent.abbreviation}</span>
+        <span className="text-white">{opponentAbbr}</span>
       </td>
       <td className="py-3 px-2 text-sm">
         <span className={won ? 'text-green-400' : 'text-red-400'}>
@@ -102,13 +96,14 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
   let player: BDLPlayer | null = null
   let seasonAverages: BDLSeasonAverage[] = []
   let recentStats: BDLPlayerStats[] = []
+  let headshotUrl: string | null = null
 
   try {
     // Fetch all data in parallel, but handle errors gracefully
     const [playerResult, seasonResult, statsResult] = await Promise.allSettled([
       getPlayer(playerId),
       getSeasonAverages(currentSeason, [playerId]),
-      getPlayerStats(undefined, [playerId], undefined, 10) // Last 10 games
+      getPlayerStats(undefined, [playerId], undefined, 10, currentSeason) // Last 10 games of current season
     ])
 
     if (playerResult.status === 'fulfilled') {
@@ -119,6 +114,11 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
     }
     if (statsResult.status === 'fulfilled') {
       recentStats = statsResult.value
+    }
+
+    // Fetch headshot URL if we have the player
+    if (player) {
+      headshotUrl = await getPlayerHeadshotURL(playerId, player.first_name, player.last_name)
     }
   } catch (error) {
     console.error('Error fetching player data:', error)
@@ -152,20 +152,12 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ i
       <div className="glass rounded-2xl p-6 sm:p-8 mb-8 animate-fade-in">
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
           {/* Player Photo */}
-          <div className="w-32 h-32 sm:w-40 sm:h-40 relative flex-shrink-0 rounded-full overflow-hidden bg-gray-800 ring-4 ring-primary/20">
-            {/* Initials as fallback background */}
-            <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-600">
-              {player.first_name[0]}{player.last_name[0]}
-            </div>
-            {/* Player headshot - will overlay initials if loads */}
-            <Image
-              src={getPlayerHeadshot(player)}
-              alt={`${player.first_name} ${player.last_name}`}
-              fill
-              className="object-cover"
-              unoptimized
-            />
-          </div>
+          <PlayerHeadshot
+            src={headshotUrl}
+            firstName={player.first_name}
+            lastName={player.last_name}
+            size="large"
+          />
 
           {/* Player Info */}
           <div className="flex-1 text-center md:text-left">

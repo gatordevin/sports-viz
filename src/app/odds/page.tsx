@@ -96,12 +96,13 @@ async function getEnrichedTeamData(
     if (!stats) return null
 
     // Calculate rest info (this works for both NBA and NFL)
+    // Returns null if no recent games available
     const restInfo = calculateRestInfo(recentGames, gameDate)
 
     // For NBA: Use REAL betting stats from BallDontLie API (which has actual historical spreads)
     // For NFL: Fall back to simulated stats (BallDontLie doesn't have NFL betting data)
-    let atsRecord: ATSRecord | RealATSRecord
-    let ouRecord: OURecord | RealOURecord
+    let atsRecord: ATSRecord | RealATSRecord | null | undefined = undefined
+    let ouRecord: OURecord | RealOURecord | null | undefined = undefined
     let isRealBettingData = false
 
     if (sport === 'nba') {
@@ -116,20 +117,22 @@ async function getEnrichedTeamData(
         atsRecord = realATS
         isRealBettingData = true
       } else {
-        // Fall back to simulated if real data unavailable
-        atsRecord = calculateATSRecord(recentGames)
+        // Fall back to simulated if real data unavailable (may return null)
+        atsRecord = calculateATSRecord(recentGames) || undefined
       }
 
       if (realOU.isRealData && realOU.overs + realOU.unders > 0) {
         ouRecord = realOU
         isRealBettingData = true
       } else {
-        ouRecord = calculateOURecord(recentGames, sport)
+        // Fall back to simulated if real data unavailable (may return null)
+        ouRecord = calculateOURecord(recentGames, sport) || undefined
       }
     } else {
       // NFL: Use simulated stats (no real betting data available)
-      atsRecord = calculateATSRecord(recentGames)
-      ouRecord = calculateOURecord(recentGames, sport)
+      // These may return null if no recent games
+      atsRecord = calculateATSRecord(recentGames) || undefined
+      ouRecord = calculateOURecord(recentGames, sport) || undefined
     }
 
     return {
@@ -148,7 +151,7 @@ async function getEnrichedTeamData(
       injuries,
       atsRecord,
       ouRecord,
-      restInfo,
+      restInfo: restInfo ?? undefined,
       isRealBettingData
     }
   } catch (error) {

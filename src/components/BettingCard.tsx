@@ -339,6 +339,9 @@ function BettingStatsRow({ teamData, isHome, sport }: { teamData: TeamData; isHo
   const ouRecord = teamData.ouRecord
   const isRealData = teamData.isRealBettingData
 
+  // Check if we have any betting data at all
+  const hasAnyBettingData = atsRecord || ouRecord
+
   return (
     <div className="space-y-1.5 sm:space-y-2 text-[10px] sm:text-xs">
       {/* Real Data Badge - shows when using actual historical spreads */}
@@ -353,7 +356,19 @@ function BettingStatsRow({ teamData, isHome, sport }: { teamData: TeamData; isHo
         </div>
       )}
 
-      {/* ATS Record - Always show */}
+      {/* Show unavailable notice if no betting data */}
+      {!hasAnyBettingData && (
+        <div className="flex items-center gap-1 mb-1">
+          <span className="px-1.5 py-0.5 rounded text-[8px] font-medium bg-gray-500/20 text-gray-400 flex items-center gap-0.5">
+            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            ATS/O/U data unavailable
+          </span>
+        </div>
+      )}
+
+      {/* ATS Record - Only show when data available */}
       {atsRecord && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-0">
           <span className="text-gray-400">ATS:</span>

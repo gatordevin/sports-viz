@@ -190,7 +190,7 @@ async function buildGamePrediction(
         position: i.position || ''
       })),
       isHome: true,
-      restInfo: homeSchedule.length > 0 ? calculateRestInfo(homeSchedule, gameDate) : undefined
+      restInfo: homeSchedule.length > 0 ? calculateRestInfo(homeSchedule, gameDate) ?? undefined : undefined
     }
 
     const awayTeamData: TeamPredictionData = {
@@ -206,7 +206,7 @@ async function buildGamePrediction(
         position: i.position || ''
       })),
       isHome: false,
-      restInfo: awaySchedule.length > 0 ? calculateRestInfo(awaySchedule, gameDate) : undefined
+      restInfo: awaySchedule.length > 0 ? calculateRestInfo(awaySchedule, gameDate) ?? undefined : undefined
     }
 
     // Get prediction

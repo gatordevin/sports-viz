@@ -65,19 +65,10 @@ export interface TeamBettingProfile {
 export function calculateATSRecord(
   recentGames: RecentGame[],
   averageSpread: number = 0 // Expected spread based on team strength
-): ATSRecord {
+): ATSRecord | null {
   if (recentGames.length === 0) {
-    // Return sample data when no games available so UI still renders
-    return {
-      wins: 5,
-      losses: 4,
-      pushes: 1,
-      percentage: 56,
-      homeATS: { wins: 3, losses: 2, pushes: 0 },
-      awayATS: { wins: 2, losses: 2, pushes: 1 },
-      recentATS: ['W', 'L', 'W', 'W', 'L'] as ('W' | 'L' | 'P')[],
-      isSampleData: true
-    } as ATSRecord & { isSampleData?: boolean }
+    // Return null when no games available - UI should handle this gracefully
+    return null
   }
 
   let wins = 0
@@ -138,19 +129,10 @@ export function calculateATSRecord(
 export function calculateOURecord(
   recentGames: RecentGame[],
   sport: 'nba' | 'nfl'
-): OURecord {
+): OURecord | null {
   if (recentGames.length === 0) {
-    // Return sample data when no games available so UI still renders
-    const avgTotal = sport === 'nba' ? 218 : 44
-    return {
-      overs: 5,
-      unders: 4,
-      pushes: 1,
-      overPercentage: 56,
-      averageTotalPoints: avgTotal,
-      recentOU: ['O', 'U', 'O', 'O', 'U'] as ('O' | 'U' | 'P')[],
-      isSampleData: true
-    } as OURecord & { isSampleData?: boolean }
+    // Return null when no games available - UI should handle this gracefully
+    return null
   }
 
   const avgLeagueTotal = sport === 'nba' ? 220 : 45
@@ -201,16 +183,10 @@ export function calculateOURecord(
 export function calculateRestInfo(
   recentGames: RecentGame[],
   nextGameDate: Date
-): RestInfo {
+): RestInfo | null {
   if (recentGames.length === 0) {
-    // Return sample data when no games available
-    return {
-      daysOfRest: 2,
-      isBackToBack: false,
-      gamesInLast7Days: 3,
-      gamesInLast14Days: 6,
-      isSampleData: true
-    } as RestInfo & { isSampleData?: boolean }
+    // Return null when no games available - UI should handle this gracefully
+    return null
   }
 
   // Sort games by date (most recent first)

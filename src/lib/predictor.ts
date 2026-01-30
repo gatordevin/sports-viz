@@ -26,7 +26,9 @@ export interface GamePrediction {
   homeTeam: string
   awayTeam: string
   predictedWinner: string
-  winProbability: number // 0-100
+  winProbability: number // 0-100 (winner's probability for display)
+  homeWinProbability: number // 0-100 (explicit home team win probability)
+  awayWinProbability: number // 0-100 (explicit away team win probability)
   confidence: 'low' | 'medium' | 'high'
   predictedHomeScore: number
   predictedAwayScore: number
@@ -332,7 +334,11 @@ export function predictGame(
   // ~7 point margin in NBA = ~75% win probability
   const marginStdDev = sport === 'nba' ? 11 : 13 // Standard deviation of margin
   const zScore = predictedMargin / marginStdDev
-  const winProbability = Math.round(normalCDF(zScore) * 100)
+  // normalCDF gives probability of home team winning (positive margin = home wins)
+  const homeWinProb = Math.round(normalCDF(zScore) * 100)
+  const awayWinProb = 100 - homeWinProb
+  // winProbability is the predicted winner's probability (for display purposes)
+  const winProbability = predictedMargin >= 0 ? homeWinProb : awayWinProb
 
   // Determine confidence
   let confidence: 'low' | 'medium' | 'high' = 'low'
@@ -355,7 +361,9 @@ export function predictGame(
     homeTeam: homeTeam.name,
     awayTeam: awayTeam.name,
     predictedWinner: predictedMargin >= 0 ? homeTeam.name : awayTeam.name,
-    winProbability: predictedMargin >= 0 ? winProbability : 100 - winProbability,
+    winProbability, // Winner's probability for display
+    homeWinProbability: homeWinProb, // Explicit home team probability
+    awayWinProbability: awayWinProb, // Explicit away team probability
     confidence,
     predictedHomeScore,
     predictedAwayScore,
@@ -486,11 +494,9 @@ export function findValueBets(
   const homeImpliedProb = oddsToImpliedProbability(marketOdds.homeMoneyline)
   const awayImpliedProb = oddsToImpliedProbability(marketOdds.awayMoneyline)
 
-  // Our probabilities
-  const ourHomeProb = prediction.predictedSpread < 0
-    ? prediction.winProbability
-    : 100 - prediction.winProbability
-  const ourAwayProb = 100 - ourHomeProb
+  // Our probabilities - use explicit home/away probabilities from prediction
+  const ourHomeProb = prediction.homeWinProbability
+  const ourAwayProb = prediction.awayWinProbability
 
   // Edge = our prob - market implied prob (accounting for vig)
   const homeMLEdge = ourHomeProb - homeImpliedProb

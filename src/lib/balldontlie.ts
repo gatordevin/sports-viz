@@ -42,8 +42,10 @@ export interface BDLGame {
   postseason: boolean
   home_team_score: number
   visitor_team_score: number
-  home_team: BDLTeam
-  visitor_team: BDLTeam
+  home_team?: BDLTeam
+  visitor_team?: BDLTeam
+  home_team_id: number
+  visitor_team_id: number
   datetime: string
 }
 
@@ -229,11 +231,17 @@ export async function getPlayerStats(
   dates?: string[],
   playerIds?: number[],
   gameIds?: number[],
-  perPage: number = 25
+  perPage: number = 25,
+  season?: number
 ): Promise<BDLPlayerStats[]> {
   try {
     const params: Record<string, string> = {
       per_page: perPage.toString()
+    }
+
+    // Season filter - use seasons[] array format as required by API
+    if (season) {
+      params['seasons[]'] = season.toString()
     }
 
     if (dates && dates.length > 0) {
@@ -329,6 +337,21 @@ export const BDL_TEAM_IDS = {
   thunder: 21, magic: 22, sixers: 23, suns: 24, blazers: 25,
   kings: 26, spurs: 27, raptors: 28, jazz: 29, wizards: 30
 } as const
+
+// BallDontLie Team ID to Abbreviation mapping
+export const BDL_TEAM_ABBR: Record<number, string> = {
+  1: 'ATL', 2: 'BOS', 3: 'BKN', 4: 'CHA', 5: 'CHI',
+  6: 'CLE', 7: 'DAL', 8: 'DEN', 9: 'DET', 10: 'GSW',
+  11: 'HOU', 12: 'IND', 13: 'LAC', 14: 'LAL', 15: 'MEM',
+  16: 'MIA', 17: 'MIL', 18: 'MIN', 19: 'NOP', 20: 'NYK',
+  21: 'OKC', 22: 'ORL', 23: 'PHI', 24: 'PHX', 25: 'POR',
+  26: 'SAC', 27: 'SAS', 28: 'TOR', 29: 'UTA', 30: 'WAS'
+}
+
+// Helper to get team abbreviation from BDL team ID
+export function getTeamAbbr(teamId: number): string {
+  return BDL_TEAM_ABBR[teamId] || 'N/A'
+}
 
 // ESPN Team ID to BallDontLie Team ID mapping
 // ESPN uses different IDs than BallDontLie

@@ -138,7 +138,7 @@ function PlayersPageContent() {
       // Try the full query first
       const res = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(trimmedQuery)}&per_page=25`, {
         headers: {
-          'Authorization': 'REDACTED_BDL_KEY_OLD'
+          'Authorization': 'REDACTED_BDL_KEY'
         }
       })
 
@@ -153,7 +153,7 @@ function PlayersPageContent() {
         // Try first name search first
         const firstNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(firstName)}&per_page=25`, {
           headers: {
-            'Authorization': 'REDACTED_BDL_KEY_OLD'
+            'Authorization': 'REDACTED_BDL_KEY'
           }
         })
 
@@ -177,7 +177,7 @@ function PlayersPageContent() {
         if (data.data.length === 0) {
           const lastNameRes = await fetch(`https://api.balldontlie.io/v1/players?search=${encodeURIComponent(nameParts[nameParts.length - 1])}&per_page=25`, {
             headers: {
-              'Authorization': 'REDACTED_BDL_KEY_OLD'
+              'Authorization': 'REDACTED_BDL_KEY'
             }
           })
           if (lastNameRes.ok) {
@@ -216,22 +216,28 @@ function PlayersPageContent() {
     setLoadingStats(true)
 
     try {
-      // Build query string with multiple player_ids
-      const params = new URLSearchParams({ season: '2024' })
-      playerIds.forEach(id => params.append('player_ids[]', id.toString()))
-
-      const res = await fetch(`https://api.balldontlie.io/v1/season_averages?${params.toString()}`, {
-        headers: {
-          'Authorization': 'REDACTED_BDL_KEY_OLD'
+      // Fetch each player's season averages in parallel (API requires single player_id)
+      const fetchPromises = playerIds.map(async (playerId) => {
+        try {
+          const res = await fetch(`https://api.balldontlie.io/v1/season_averages?season=2024&player_id=${playerId}`, {
+            headers: {
+              'Authorization': 'REDACTED_BDL_KEY'
+            }
+          })
+          if (!res.ok) return null
+          const data = await res.json()
+          return data.data?.[0] || null
+        } catch {
+          return null
         }
       })
 
-      if (!res.ok) return
-
-      const data = await res.json()
+      const results = await Promise.all(fetchPromises)
       const avgMap: Record<number, BDLSeasonAverage> = {}
-      data.data.forEach((avg: BDLSeasonAverage) => {
-        avgMap[avg.player_id] = avg
+      results.forEach((avg: BDLSeasonAverage | null) => {
+        if (avg) {
+          avgMap[avg.player_id] = avg
+        }
       })
       setSeasonAverages(avgMap)
     } catch (err) {

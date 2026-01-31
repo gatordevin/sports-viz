@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { useUser, SignInButton } from '@clerk/nextjs'
 import { useSearchParams } from 'next/navigation'
+import { trackPricingViewed, trackCheckoutStarted, trackEvent, AnalyticsEvents } from '@/lib/analytics'
 
 const features = {
   free: [
@@ -42,8 +43,16 @@ export default function PricingPage() {
   const { isSignedIn, isLoaded } = useUser()
   const [loading, setLoading] = useState(false)
 
+  // Track pricing page view on mount
+  useEffect(() => {
+    trackPricingViewed()
+  }, [])
+
   const handleSubscribe = async () => {
     if (!isSignedIn) return
+
+    // Track checkout started
+    trackCheckoutStarted('pro_monthly')
 
     setLoading(true)
     try {
@@ -159,7 +168,10 @@ export default function PricingPage() {
             </ul>
             {isLoaded && !isSignedIn ? (
               <SignInButton mode="modal">
-                <button className="w-full py-3 px-6 rounded-lg font-semibold bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 transition-opacity">
+                <button
+                  onClick={() => trackEvent(AnalyticsEvents.SIGNUP_STARTED, { category: 'conversion', label: 'pricing_page' })}
+                  className="w-full py-3 px-6 rounded-lg font-semibold bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 transition-opacity"
+                >
                   Sign In to Subscribe
                 </button>
               </SignInButton>

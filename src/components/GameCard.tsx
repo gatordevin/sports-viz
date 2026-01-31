@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Game } from '@/lib/espn'
+import { trackGameViewed } from '@/lib/analytics'
 
 interface GameCardProps {
   game: Game
@@ -40,8 +41,22 @@ export default function GameCard({ game }: GameCardProps) {
   const awayWinning = !isScheduled && parseInt(game.awayScore) > parseInt(game.homeScore)
   const homeWinning = !isScheduled && parseInt(game.homeScore) > parseInt(game.awayScore)
 
+  const handleGameClick = () => {
+    // Determine sport based on game data (if league info is available)
+    const sport = game.homeTeam.displayName?.includes('NBA') ? 'NBA' : 'NFL'
+    trackGameViewed(
+      sport as 'NBA' | 'NFL',
+      game.id,
+      game.homeTeam.displayName,
+      game.awayTeam.displayName
+    )
+  }
+
   return (
-    <div className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300 animate-fade-in min-h-[180px]">
+    <div
+      className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300 animate-fade-in min-h-[180px] cursor-pointer"
+      onClick={handleGameClick}
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">

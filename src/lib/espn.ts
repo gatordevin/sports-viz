@@ -542,11 +542,23 @@ export async function getTeamBettingStats(sport: 'nba' | 'nfl', teamId: string):
       pointsPerGame: getStatValue('avgPointsFor') || getStatValue('pointsFor') / Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1),
       pointsAllowedPerGame: getStatValue('avgPointsAgainst') || getStatValue('pointsAgainst') / Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1),
       pointDifferential: (() => {
-        // Try to get per-game differential first, otherwise calculate from total
+        // Calculate per-game point differential consistently
         const gamesPlayed = Math.max(parseRecord(overallRecord?.summary).wins + parseRecord(overallRecord?.summary).losses, 1)
-        const totalDiff = getStatValue('pointDifferential') || (getStatValue('pointsFor') - getStatValue('pointsAgainst'))
-        // If total diff seems like season total (abs > 50), convert to per game
-        return Math.abs(totalDiff) > 50 ? totalDiff / gamesPlayed : totalDiff
+        // First try ESPN's per-game averages if available
+        const avgFor = getStatValue('avgPointsFor')
+        const avgAgainst = getStatValue('avgPointsAgainst')
+        if (avgFor && avgAgainst) {
+          return avgFor - avgAgainst
+        }
+        // Otherwise calculate from totals - always divide by games played
+        const totalFor = getStatValue('pointsFor')
+        const totalAgainst = getStatValue('pointsAgainst')
+        if (totalFor && totalAgainst) {
+          return (totalFor - totalAgainst) / gamesPlayed
+        }
+        // Fallback: if we have a raw pointDifferential stat, divide it by games played
+        const rawDiff = getStatValue('pointDifferential')
+        return rawDiff ? rawDiff / gamesPlayed : 0
       })(),
       rank: team.rank || 0,
       conferenceRank: team.conferenceRank || 0

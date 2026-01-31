@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { OddsEvent, formatOdds, oddsToPercentage, getProbabilityColor, getProbabilityBarColor } from '@/lib/odds'
+import { trackEvent, AnalyticsEvents, trackBetTypeSelected } from '@/lib/analytics'
 import { Injury, RecentGame, calculateForm } from '@/lib/espn'
 import {
   ATSRecord,
@@ -506,8 +507,22 @@ export default function BettingCard({
     return `${gameTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} ${timeStr}`
   }
 
+  // Track when user views betting card details
+  const handleCardInteraction = (type: 'spread' | 'moneyline' | 'total') => {
+    trackBetTypeSelected(type)
+    trackEvent(AnalyticsEvents.ODDS_COMPARISON_VIEWED, {
+      category: 'betting',
+      sport: sport.toUpperCase() as 'NBA' | 'NFL',
+      betType: type,
+      gameId: event.id
+    })
+  }
+
   return (
-    <div className="glass-card rounded-xl overflow-hidden hover:bg-white/[0.03] transition-all duration-300">
+    <div
+      className="glass-card rounded-xl overflow-hidden hover:bg-white/[0.03] transition-all duration-300"
+      onClick={() => handleCardInteraction('spread')}
+    >
       {/* Header */}
       <div className="px-4 py-3 bg-white/5 border-b border-white/10">
         <div className="flex items-center justify-between">

@@ -7,6 +7,7 @@ import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton, useUser } 
 import { isProUser } from '@/lib/admin'
 import { Alert } from '@/lib/alerts'
 import { AlertsDropdown } from './AlertsPanel'
+import { trackNavClick, trackCTAClick, AnalyticsEvents, trackEvent } from '@/lib/analytics'
 
 const navItems = [
   { name: 'Dashboard', href: '/' },
@@ -28,6 +29,19 @@ export default function Navigation() {
   const isPro = isProUser(userEmail)
 
   const closeMenu = () => setMobileMenuOpen(false)
+
+  // Track navigation clicks
+  const handleNavClick = (itemName: string, href: string) => {
+    trackNavClick(href, 'main_nav')
+    if (itemName === 'Odds') {
+      trackEvent(AnalyticsEvents.ODDS_VIEWED, { category: 'betting' })
+    }
+  }
+
+  // Track CTA clicks
+  const handleCTAClick = (ctaName: string) => {
+    trackCTAClick(ctaName, pathname)
+  }
 
   // Fetch alerts
   const fetchAlerts = useCallback(async () => {
@@ -111,6 +125,7 @@ export default function Navigation() {
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={() => handleNavClick(item.name, item.href)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center ${
                     isActive
                       ? 'bg-white/10 text-white'
@@ -139,12 +154,21 @@ export default function Navigation() {
           <div className="hidden md:flex items-center space-x-4">
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors">
+                <button
+                  onClick={() => handleCTAClick('sign_in_nav')}
+                  className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+                >
                   Sign In
                 </button>
               </SignInButton>
               <SignUpButton mode="modal">
-                <button className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-primary to-secondary rounded-lg hover:opacity-90 transition-opacity">
+                <button
+                  onClick={() => {
+                    handleCTAClick('get_started_nav')
+                    trackEvent(AnalyticsEvents.SIGNUP_STARTED, { category: 'conversion' })
+                  }}
+                  className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-primary to-secondary rounded-lg hover:opacity-90 transition-opacity"
+                >
                   Get Started
                 </button>
               </SignUpButton>
@@ -189,6 +213,10 @@ export default function Navigation() {
               ) : (
                 <Link
                   href="/pricing"
+                  onClick={() => {
+                    handleNavClick('pricing', '/pricing')
+                    trackEvent(AnalyticsEvents.PRICING_VIEWED, { category: 'conversion' })
+                  }}
                   className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-primary to-secondary rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Upgrade to Pro

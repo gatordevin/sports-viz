@@ -326,6 +326,9 @@ export function predictGame(
   }
 
   // Calculate predicted scores based on margin and total
+  // predictedMargin is HOME's margin: positive = home wins by that many, negative = away wins
+  // So when margin is positive, home scores MORE than away
+  // When margin is negative, home scores LESS than away (away scores more)
   const predictedHomeScore = Math.round((predictedTotal / 2) + (predictedMargin / 2))
   const predictedAwayScore = Math.round((predictedTotal / 2) - (predictedMargin / 2))
 

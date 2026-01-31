@@ -5,15 +5,21 @@ import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { BDLPlayer, BDLSeasonAverage } from '@/lib/balldontlie'
+import { trackSearch, trackPlayerViewed } from '@/lib/analytics'
 
 interface PlayerWithStats extends BDLPlayer {
   seasonAvg?: BDLSeasonAverage
 }
 
 function PlayerSearchCard({ player, seasonAvg }: { player: BDLPlayer; seasonAvg?: BDLSeasonAverage }) {
+  const handlePlayerClick = () => {
+    trackPlayerViewed(player.id.toString(), `${player.first_name} ${player.last_name}`)
+  }
+
   return (
     <Link
       href={`/players/${player.id}`}
+      onClick={handlePlayerClick}
       className="glass rounded-xl p-4 sm:p-5 hover:bg-white/[0.08] transition-all duration-300 block group cursor-pointer"
     >
       <div className="flex items-start space-x-4">
@@ -197,6 +203,9 @@ function PlayersPageContent() {
       }
 
       setPlayers(data.data)
+
+      // Track search with result count
+      trackSearch(trimmedQuery, data.data.length)
 
       // Fetch season averages for found players
       if (data.data.length > 0) {
